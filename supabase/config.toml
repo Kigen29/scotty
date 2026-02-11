@@ -5,3 +5,12 @@ verify_jwt = false
 
 [functions.generate-email]
 verify_jwt = false
+
+[functions.send-email]
+verify_jwt = false
+
+[functions.auto-discover]
+verify_jwt = false
+
+[functions.auto-follow-up]
+verify_jwt = false
