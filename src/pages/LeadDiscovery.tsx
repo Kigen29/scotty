@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -7,11 +7,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Globe, Phone, Mail, MapPin, ExternalLink, CheckCircle2, X, Loader2 } from "lucide-react";
+import { Search, Globe, GlobeIcon, Phone, Mail, MapPin, CheckCircle2, X, Loader2, Filter } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 const categories = ["restaurants", "salons", "hardware stores", "clinics", "retail shops", "schools", "hotels", "pharmacies"];
 const locations = ["Nairobi", "Mombasa", "Kisumu", "Nakuru", "Eldoret", "Thika", "Nyeri", "Malindi"];
+
+const statusColors: Record<string, string> = {
+  discovered: "bg-secondary text-secondary-foreground",
+  qualified: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
+  contacted: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  responded: "bg-primary/15 text-primary dark:text-primary",
+  interested: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+  not_interested: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  dismissed: "bg-secondary text-secondary-foreground",
+};
+
+type WebsiteFilter = "all" | "no_website" | "has_website";
 
 const LeadDiscovery = () => {
   const { user } = useAuth();
@@ -22,6 +34,7 @@ const LeadDiscovery = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [generatingEmail, setGeneratingEmail] = useState<string | null>(null);
+  const [websiteFilter, setWebsiteFilter] = useState<WebsiteFilter>("all");
 
   const generateEmail = async (leadId: string) => {
     setGeneratingEmail(leadId);
@@ -78,25 +91,24 @@ const LeadDiscovery = () => {
     fetchLeads();
   };
 
-  const statusColors: Record<string, string> = {
-    discovered: "bg-muted text-muted-foreground",
-    qualified: "bg-[hsl(var(--info))]/10 text-[hsl(var(--info))]",
-    contacted: "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]",
-    responded: "bg-primary/10 text-primary",
-    interested: "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]",
-    not_interested: "bg-destructive/10 text-destructive",
-    dismissed: "bg-muted text-muted-foreground",
-  };
+  const filteredLeads = leads.filter((lead) => {
+    if (websiteFilter === "no_website") return !lead.has_website;
+    if (websiteFilter === "has_website") return lead.has_website;
+    return true;
+  });
+
+  const noWebsiteCount = leads.filter((l) => !l.has_website).length;
+  const hasWebsiteCount = leads.filter((l) => l.has_website).length;
 
   return (
     <div className="p-8 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Lead Discovery</h1>
+        <h1 className="text-3xl font-bold text-foreground">Lead Discovery</h1>
         <p className="text-muted-foreground mt-1">Find Kenyan businesses that need your services</p>
       </div>
 
       {/* Search Controls */}
-      <Card>
+      <Card className="border border-border">
         <CardContent className="p-6">
           <div className="flex flex-wrap gap-4">
             <Select value={category} onValueChange={setCategory}>
@@ -133,42 +145,73 @@ const LeadDiscovery = () => {
         </CardContent>
       </Card>
 
+      {/* Filter Bar */}
+      {leads.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground mr-1">Filter:</span>
+          {([
+            { value: "all" as WebsiteFilter, label: `All (${leads.length})` },
+            { value: "no_website" as WebsiteFilter, label: `No Website (${noWebsiteCount})` },
+            { value: "has_website" as WebsiteFilter, label: `Has Website (${hasWebsiteCount})` },
+          ]).map((f) => (
+            <Button
+              key={f.value}
+              size="sm"
+              variant={websiteFilter === f.value ? "default" : "outline"}
+              onClick={() => setWebsiteFilter(f.value)}
+              className="text-xs"
+            >
+              {f.label}
+            </Button>
+          ))}
+        </div>
+      )}
+
       {/* Leads List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {leads.map((lead) => (
-          <Card key={lead.id} className="relative">
+        {filteredLeads.map((lead) => (
+          <Card key={lead.id} className="relative border border-border">
             <CardContent className="p-5">
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className="font-semibold text-base">{lead.business_name}</h3>
-                  <div className="flex items-center gap-2 mt-1">
+                  <h3 className="font-semibold text-base text-foreground">{lead.business_name}</h3>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
                     {lead.category && <Badge variant="secondary" className="text-xs">{lead.category}</Badge>}
-                    <Badge className={`text-xs ${statusColors[lead.status] || ""}`}>
+                    <Badge className={`text-xs border-0 ${statusColors[lead.status] || "bg-secondary text-secondary-foreground"}`}>
                       {lead.status.replace("_", " ")}
                     </Badge>
                   </div>
                 </div>
-                {lead.has_website ? (
-                  <Globe className="h-4 w-4 text-[hsl(var(--success))]" />
-                ) : (
-                  <Globe className="h-4 w-4 text-destructive" />
-                )}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {lead.has_website ? (
+                    <>
+                      <Globe className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Website</span>
+                    </>
+                  ) : (
+                    <>
+                      <Globe className="h-4 w-4 text-red-500 dark:text-red-400" />
+                      <span className="text-xs text-red-600 dark:text-red-400 font-medium">No Website</span>
+                    </>
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-1.5 text-sm text-muted-foreground">
+              <div className="space-y-1.5 text-sm text-foreground/80">
                 {lead.location && (
                   <div className="flex items-center gap-2">
-                    <MapPin className="h-3.5 w-3.5" /> {lead.location}
+                    <MapPin className="h-3.5 w-3.5 text-muted-foreground" /> {lead.location}
                   </div>
                 )}
                 {lead.phone && (
                   <div className="flex items-center gap-2">
-                    <Phone className="h-3.5 w-3.5" /> {lead.phone}
+                    <Phone className="h-3.5 w-3.5 text-muted-foreground" /> {lead.phone}
                   </div>
                 )}
                 {lead.email && (
                   <div className="flex items-center gap-2">
-                    <Mail className="h-3.5 w-3.5" /> {lead.email}
+                    <Mail className="h-3.5 w-3.5 text-muted-foreground" /> {lead.email}
                   </div>
                 )}
               </div>
@@ -201,6 +244,14 @@ const LeadDiscovery = () => {
           <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p className="text-lg">No leads discovered yet</p>
           <p className="text-sm">Select a category and location above to start discovering businesses</p>
+        </div>
+      )}
+
+      {leads.length > 0 && filteredLeads.length === 0 && (
+        <div className="text-center py-16 text-muted-foreground">
+          <Filter className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <p className="text-lg">No leads match this filter</p>
+          <p className="text-sm">Try changing the filter above</p>
         </div>
       )}
     </div>

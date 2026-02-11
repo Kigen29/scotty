@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
       const category = categories[Math.floor(Math.random() * categories.length)];
       const location = locations[Math.floor(Math.random() * locations.length)];
 
-      const searchQuery = `${category} ${location} Kenya business contact phone`;
+      const searchQuery = `${category} ${location} Kenya small business no website local`;
 
       console.log(`Auto-discovering for user ${userSettings.user_id}: ${searchQuery}`);
 
@@ -78,6 +78,14 @@ Deno.serve(async (req) => {
 
       // Extract businesses with AI
       const extractionPrompt = `Analyze these search results and extract Kenyan business leads.
+We are specifically looking for businesses that do NOT have their own website.
+
+IMPORTANT RULES:
+- If a business has its own domain/professional website, set has_website to true. These are LOW priority.
+- If a business is only found on directories (Google Maps, Yellow Pages, Facebook, Jumia, etc.), set has_website to false. These are our PRIMARY targets.
+- Focus on small/local businesses that would benefit from getting a website built for them.
+- Skip large chains or well-known franchises.
+
 Search results:
 ${results.map((r: any, i: number) => `
 Result ${i + 1}:

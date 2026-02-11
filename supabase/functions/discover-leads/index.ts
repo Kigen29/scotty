@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
     if (category) searchTerms.push(category);
     if (location) searchTerms.push(location);
     if (query) searchTerms.push(query);
-    searchTerms.push("Kenya business contact phone");
+    searchTerms.push("Kenya small business no website local");
 
     const searchQuery = searchTerms.join(" ");
 
@@ -87,8 +87,15 @@ Deno.serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const extractionPrompt = `You are analyzing web search results to extract Kenyan business leads. 
-For each result, extract business information if it represents a real business (not a directory listing page itself).
+    const extractionPrompt = `You are analyzing web search results to extract Kenyan business leads.
+We are specifically looking for businesses that do NOT have their own website.
+
+IMPORTANT RULES:
+- If a business has its own domain/professional website, set has_website to true. These are LOW priority.
+- If a business is only found on directories (Google Maps, Yellow Pages, Facebook, Jumia, etc.), set has_website to false. These are our PRIMARY targets.
+- Focus on small/local businesses that would benefit from getting a website built for them.
+- Skip large chains or well-known franchises.
+- Only include actual businesses, not directory pages or articles themselves.
 
 Search results:
 ${results.map((r: any, i: number) => `
@@ -100,8 +107,6 @@ Content: ${(r.markdown || "").substring(0, 500)}
 `).join("\n")}
 
 Extract businesses and return them using the extract_businesses function.
-Only include actual businesses, not directory pages or articles.
-For has_website: true if they have their own domain/website, false if only found on directories.
 Category should be: ${category || "general"}.
 Location should default to: ${location || "Kenya"}.`;
 
