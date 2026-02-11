@@ -1,74 +1,62 @@
 
 
-# Plan: Fix UI Visibility and Target Businesses Without Websites
+# Plan: Personal Autonomous Outreach System
 
-## Problem 1: Text Visibility Issues
-The Lead Discovery page uses dark-theme CSS variables like `hsl(var(--info))`, `hsl(var(--success))`, and `hsl(var(--warning))` for badge colors. Some of these, combined with low-opacity backgrounds (`/10`), can make text hard to read depending on the theme. The status badges and some card text may blend into backgrounds.
+## Overview
+Transform the system from a company-branded, semi-manual workflow into a fully autonomous personal outreach system that sends emails from Emmanuel Kigen (emmanuelkigen029@gmail.com) without requiring manual approval at any step.
 
-**Fix:**
-- Replace custom HSL color classes on badges with simpler, high-contrast Tailwind classes
-- Ensure all text on cards (business name, location, phone, email) has strong foreground contrast
-- Add explicit text colors to buttons and improve card styling with subtle borders
+## Changes
 
-## Problem 2: Discovering Businesses WITH Websites Instead of WITHOUT
+### 1. Edge Function: `send-email/index.ts`
+- Change the `from` field from `${companyName} <${senderEmail}>` to `Emmanuel Kigen <emmanuelkigen029@gmail.com>` (or read sender name from settings instead of company_name)
+- Remove dependency on `settings.company_name` for the "from" name
 
-The current search query in `discover-leads/index.ts` appends `"Kenya business contact phone"` to the search, which naturally returns established businesses with websites. The AI extraction prompt also does not emphasize filtering for businesses **without** an online presence.
+### 2. Edge Function: `auto-follow-up/index.ts`
+- Change `from` field from `${companyName} <${senderEmail}>` to use a personal name (from settings or hardcoded)
+- Remove company references from the AI follow-up prompts
+- Add personal context: "You are Emmanuel Kigen, a freelance web developer reaching out personally"
 
-**Fix - Two changes:**
+### 3. Edge Function: `generate-email/index.ts`
+- Remove all company references from the AI prompts (`companyName`, company portfolio, company services framing)
+- Reframe the prompt as a personal outreach: "You are Emmanuel Kigen, a web developer..." instead of "Mention ${companyName} and our services"
+- Keep services and portfolio but frame them as personal offerings, not company offerings
+- Update signature handling to use personal name
 
-### A. Update the Firecrawl search query
-- Change the search terms to target businesses that lack websites, e.g., `"Kenya business no website"` or `"small business"` instead of just `"Kenya business contact phone"`
-- Add negative search terms to filter out directory pages that list well-known businesses
+### 4. Edge Function: `auto-discover/index.ts` (make fully autonomous)
+- After discovering and inserting new leads, automatically:
+  1. Set lead status to "qualified" (skip manual approval)
+  2. Generate a first-touch email via AI (inline, same logic as generate-email)
+  3. Insert the email campaign as "draft" (the auto-follow-up cron will pick it up and send it)
+- This closes the loop: discover -> qualify -> draft email -> send (all automatic)
 
-### B. Update the AI extraction prompt
-- Explicitly instruct the AI to prioritize businesses that do NOT have their own website
-- Mark `has_website: false` for businesses found only on directories (Google Maps, Yellow Pages, etc.)
-- Tell the AI to skip businesses that clearly have professional websites
-- Add a scoring/priority note: businesses without websites are the primary target
+### 5. Settings Page (`src/pages/SettingsPage.tsx`)
+- Replace "Company Name" label with "Your Name"
+- Replace "Company Website" with "Your Website / Portfolio"
+- Remove "Company Profile" card title, replace with "Your Profile"
+- Pre-fill sender_email with emmanuelkigen029@gmail.com in the default state
 
-### C. Update the auto-discover function similarly
-- Apply the same search query and prompt changes to `auto-discover/index.ts` for consistency
+### 6. Lead Discovery Page (`src/pages/LeadDiscovery.tsx`)
+- No major changes needed (manual discovery still available as supplement)
+- The autonomous flow handles everything automatically in the background
 
-## Technical Details
+## Autonomous Flow (after changes)
 
-### Files to modify:
+```text
+Every 6 hours (auto-discover cron):
+  1. Pick random category + location from settings
+  2. Search for businesses without websites (Firecrawl)
+  3. Extract leads via AI
+  4. Insert leads as "qualified" (skip manual approval)
+  5. Generate personalized first-touch email via AI
+  6. Save as draft campaign
 
-1. **`supabase/functions/discover-leads/index.ts`**
-   - Change search query from `"Kenya business contact phone"` to `"Kenya small business no website"` or similar
-   - Update AI extraction prompt to explicitly filter for businesses without online presence
-   - Instruct the AI to set `has_website: true` only if the business has its own domain, not just a listing on a directory
-
-2. **`supabase/functions/auto-discover/index.ts`**
-   - Apply the same search query and prompt changes
-
-3. **`src/pages/LeadDiscovery.tsx`**
-   - Fix badge styling: use explicit background + text color classes instead of HSL variable references with opacity
-   - Add `border` to cards for better definition
-   - Ensure the "No Website" vs "Has Website" indicator is prominent (add a text label next to the globe icon)
-   - Add a filter toggle so the user can view "No Website" leads vs "Has Website" leads
-   - Improve overall card contrast and readability
-
-4. **`src/pages/Dashboard.tsx`** (minor)
-   - Same badge color fixes for consistency
-
-5. **`src/pages/Campaigns.tsx`** (minor)
-   - Same badge color fixes for consistency
-
-### Key search query change:
-```
-// Before
-searchTerms.push("Kenya business contact phone");
-
-// After  
-searchTerms.push("Kenya small business no website local");
+Every 2 hours during 8am-5pm EAT (auto-follow-up cron):
+  1. Send all draft emails (first-touch + follow-ups)
+  2. Check contacted leads for follow-up timing
+  3. Generate follow-up emails when intervals are met
+  4. Save follow-ups as drafts (sent on next run)
 ```
 
-### Key AI prompt change:
-```
-// Add to extraction prompt:
-"IMPORTANT: We are looking for businesses that do NOT have their own website.
-- If a business has its own domain/professional website, set has_website to true and deprioritize it.
-- If a business is only found on directories (Google Maps, Yellow Pages, Facebook), set has_website to false - these are our PRIMARY targets.
-- Focus on small/local businesses that would benefit from getting a website built for them."
-```
+## Important Note
+Since the sender email is a Gmail address (emmanuelkigen029@gmail.com), it must be verified as a domain/sender in Resend. If using Resend's free tier, emails will be sent from Resend's shared domain unless the Gmail is added as a verified sender. This may need to be configured in the Resend dashboard.
 
