@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     for (const settings of allSettings) {
       const userId = settings.user_id;
       const senderEmail = settings.sender_email;
-      const companyName = settings.company_name || "Outreach";
+      const senderName = settings.company_name || "Emmanuel Kigen";
       const dailyLimit = settings.daily_send_limit || 50;
       const followUpIntervals = settings.follow_up_intervals || [3, 7, 14];
 
@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
 
         try {
           await resend.emails.send({
-            from: `${companyName} <${senderEmail}>`,
+            from: `${senderName} <${senderEmail}>`,
             to: [lead.email],
             subject: campaign.subject,
             text: campaign.body,
@@ -144,10 +144,10 @@ Deno.serve(async (req) => {
 
         // Generate follow-up email via AI
         const prompt = nextTemplate === "follow_up_1"
-          ? `Write a brief first follow-up email to ${lead.business_name} (${lead.category} in ${lead.location}). Reference your previous email. Add a new angle. Under 100 words.`
+          ? `You are Emmanuel Kigen, a freelance web developer. Write a brief first follow-up email to ${lead.business_name} (${lead.category} in ${lead.location}). Reference your previous personal email offering to build them a website. Add a new angle. Under 100 words.`
           : nextTemplate === "follow_up_2"
-          ? `Write a second follow-up to ${lead.business_name}. Be direct, share a quick win. 50-80 words.`
-          : `Write a final follow-up to ${lead.business_name}. Be gracious, leave door open. 40-60 words.`;
+          ? `You are Emmanuel Kigen, a freelance web developer. Write a second follow-up to ${lead.business_name}. Be direct, share a quick win they'd get from having a website. 50-80 words.`
+          : `You are Emmanuel Kigen, a freelance web developer. Write a final follow-up to ${lead.business_name}. Be gracious, leave door open. 40-60 words.`;
 
         try {
           const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
             body: JSON.stringify({
               model: "google/gemini-3-flash-preview",
               messages: [
-                { role: "system", content: "Expert cold email copywriter for East African B2B outreach." },
+                { role: "system", content: "You are writing emails on behalf of Emmanuel Kigen, a freelance web developer doing personal outreach to East African businesses. Keep it personal, warm, and genuine." },
                 { role: "user", content: prompt },
               ],
               tools: [{

@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
     if (!RESEND_API_KEY) throw new Error("RESEND_API_KEY is not configured");
 
     const resend = new Resend(RESEND_API_KEY);
-    const fromName = settings?.company_name || "Outreach";
+    const fromName = settings?.company_name || "Emmanuel Kigen";
 
     console.log(`Sending email to ${recipientEmail} from ${senderEmail}`);
 
