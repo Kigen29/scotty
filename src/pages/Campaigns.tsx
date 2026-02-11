@@ -1,18 +1,21 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Mail, Send, Eye, Clock, AlertCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Mail, Send, Eye, Clock, AlertCircle, Loader2 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 
 const Campaigns = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [campaigns, setCampaigns] = useState<(Tables<"email_campaigns"> & { leads?: Tables<"leads"> })[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<Tables<"email_campaigns"> | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) fetchCampaigns();
@@ -26,6 +29,24 @@ const Campaigns = () => {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     if (data) setCampaigns(data as any);
+  };
+
+  const sendEmail = async (e: React.MouseEvent, campaignId: string) => {
+    e.stopPropagation();
+    setSendingId(campaignId);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-email", {
+        body: { campaign_id: campaignId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "Email sent successfully!" });
+      fetchCampaigns();
+    } catch (error: any) {
+      toast({ title: "Send failed", description: error.message, variant: "destructive" });
+    } finally {
+      setSendingId(null);
+    }
   };
 
   const statusIcon: Record<string, React.ReactNode> = {
@@ -68,45 +89,53 @@ const Campaigns = () => {
           <TabsTrigger value="replied">Replied</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="all" className="mt-4">
-          <CampaignList
-            campaigns={campaigns}
-            statusColor={statusColor}
-            statusIcon={statusIcon}
-            templateLabel={templateLabel}
-            onPreview={setSelectedEmail}
-          />
-        </TabsContent>
-        <TabsContent value="draft" className="mt-4">
-          <CampaignList
-            campaigns={campaigns.filter((c) => c.status === "draft")}
-            statusColor={statusColor}
-            statusIcon={statusIcon}
-            templateLabel={templateLabel}
-            onPreview={setSelectedEmail}
-          />
-        </TabsContent>
-        <TabsContent value="sent" className="mt-4">
-          <CampaignList
-            campaigns={campaigns.filter((c) => c.status === "sent")}
-            statusColor={statusColor}
-            statusIcon={statusIcon}
-            templateLabel={templateLabel}
-            onPreview={setSelectedEmail}
-          />
-        </TabsContent>
-        <TabsContent value="replied" className="mt-4">
-          <CampaignList
-            campaigns={campaigns.filter((c) => c.status === "replied")}
-            statusColor={statusColor}
-            statusIcon={statusIcon}
-            templateLabel={templateLabel}
-            onPreview={setSelectedEmail}
-          />
-        </TabsContent>
+        {["all", "draft", "sent", "replied"].map((tab) => (
+          <TabsContent key={tab} value={tab} className="mt-4">
+            <div className="space-y-3">
+              {(tab === "all" ? campaigns : campaigns.filter((c) => c.status === tab)).map((campaign) => (
+                <Card key={campaign.id} className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => setSelectedEmail(campaign)}>
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{campaign.subject}</p>
+                        <Badge className={`text-xs ${statusColor[campaign.status] || ""}`}>
+                          <span className="flex items-center gap-1">
+                            {statusIcon[campaign.status]}
+                            {campaign.status}
+                          </span>
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        To: {(campaign as any).leads?.business_name || "Unknown"} • {templateLabel[campaign.template_type] || campaign.template_type}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {campaign.status === "draft" && (
+                        <Button
+                          size="sm"
+                          onClick={(e) => sendEmail(e, campaign.id)}
+                          disabled={sendingId === campaign.id}
+                        >
+                          {sendingId === campaign.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                          ) : (
+                            <Send className="h-3.5 w-3.5 mr-1" />
+                          )}
+                          Send
+                        </Button>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(campaign.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+        ))}
       </Tabs>
 
-      {/* Email Preview Dialog */}
       <Dialog open={!!selectedEmail} onOpenChange={() => setSelectedEmail(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -128,6 +157,11 @@ const Campaigns = () => {
                 {selectedEmail.sent_at && <span>Sent: {new Date(selectedEmail.sent_at).toLocaleString()}</span>}
                 {selectedEmail.opened_at && <span>Opened: {new Date(selectedEmail.opened_at).toLocaleString()}</span>}
               </div>
+              {selectedEmail.status === "draft" && (
+                <Button onClick={(e) => { sendEmail(e, selectedEmail.id); setSelectedEmail(null); }} disabled={sendingId === selectedEmail.id}>
+                  <Send className="h-4 w-4 mr-2" /> Send Email
+                </Button>
+              )}
             </div>
           )}
         </DialogContent>
@@ -137,51 +171,11 @@ const Campaigns = () => {
         <div className="text-center py-16 text-muted-foreground">
           <Mail className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p className="text-lg">No campaigns yet</p>
-          <p className="text-sm">Campaigns will be created automatically when leads are approved for outreach</p>
+          <p className="text-sm">Campaigns will be created when leads are approved and emails are generated</p>
         </div>
       )}
     </div>
   );
 };
-
-const CampaignList = ({
-  campaigns,
-  statusColor,
-  statusIcon,
-  templateLabel,
-  onPreview,
-}: {
-  campaigns: any[];
-  statusColor: Record<string, string>;
-  statusIcon: Record<string, React.ReactNode>;
-  templateLabel: Record<string, string>;
-  onPreview: (c: any) => void;
-}) => (
-  <div className="space-y-3">
-    {campaigns.map((campaign) => (
-      <Card key={campaign.id} className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => onPreview(campaign)}>
-        <CardContent className="p-4 flex items-center gap-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <p className="font-medium">{campaign.subject}</p>
-              <Badge className={`text-xs ${statusColor[campaign.status] || ""}`}>
-                <span className="flex items-center gap-1">
-                  {statusIcon[campaign.status]}
-                  {campaign.status}
-                </span>
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground mt-1">
-              To: {campaign.leads?.business_name || "Unknown"} • {templateLabel[campaign.template_type] || campaign.template_type}
-            </p>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {new Date(campaign.created_at).toLocaleDateString()}
-          </span>
-        </CardContent>
-      </Card>
-    ))}
-  </div>
-);
 
 export default Campaigns;
