@@ -67,46 +67,49 @@ Deno.serve(async (req) => {
       .eq("user_id", userId)
       .maybeSingle();
 
-    const companyName = settings?.company_name || "our company";
+    const senderName = settings?.company_name || "Emmanuel Kigen";
     const services = settings?.services?.join(", ") || "web development, mobile apps, and digital solutions";
     const portfolio = settings?.portfolio_links?.join(", ") || "";
-    const signature = settings?.email_signature || "";
+    const signature = settings?.email_signature || `Best regards,\nEmmanuel Kigen`;
 
     const templatePrompts: Record<string, string> = {
-      first_touch: `Write a compelling cold email to ${lead.business_name}, a ${lead.category || "business"} in ${lead.location || "Kenya"}.
+      first_touch: `You are Emmanuel Kigen, a freelance web developer reaching out personally to ${lead.business_name}, a ${lead.category || "business"} in ${lead.location || "Kenya"}.
 
-Key points to address:
+Write a compelling personal cold email:
 - They ${lead.has_website ? "have a basic website" : "don't have a website"}, which means they're missing out on online customers
-- Reference their specific industry and how technology can help them
+- Reference their specific industry and how a website/digital presence can help them
 - Mention specific pain points for ${lead.category || "their"} businesses (e.g., manual booking, no online ordering, no customer reviews visibility)
-- Briefly mention ${companyName} and our services: ${services}
-${portfolio ? `- Reference our portfolio: ${portfolio}` : ""}
-- Keep it personal, warm, and not salesy — like a neighbor offering help
+- Present yourself as a freelance web developer who personally offers: ${services}
+${portfolio ? `- Mention your portfolio: ${portfolio}` : ""}
+- Keep it personal, warm, and genuine — you're a real person reaching out, not a company
 - End with a soft call-to-action (suggest a brief call or WhatsApp chat)
+- Sign off as Emmanuel Kigen
 ${signature ? `- Use this signature: ${signature}` : ""}
 
-The tone should be friendly, professional, and specifically relevant to their business type in Kenya.`,
+The tone should be friendly, personal, and specifically relevant to their business type in Kenya.`,
 
-      follow_up_1: `Write a friendly follow-up email to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
-This is the first follow-up after our initial email went unanswered.
+      follow_up_1: `You are Emmanuel Kigen, a freelance web developer. Write a friendly follow-up email to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+This is your first follow-up after your initial personal email went unanswered.
 - Be brief and casual
-- Reference the previous email
+- Reference your previous email
 - Add a new angle or insight specific to their industry
-- Maybe mention a success story or stat about businesses like theirs going digital
-- Keep it under 100 words`,
+- Keep it under 100 words
+- Sign off as Emmanuel`,
 
-      follow_up_2: `Write a second follow-up email to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
-- This is the second follow-up, be more direct but still respectful
-- Share a quick win or specific benefit (e.g., "businesses like yours see 40% more customers with a simple website")
+      follow_up_2: `You are Emmanuel Kigen, a freelance web developer. Write a second follow-up email to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+- Be more direct but still respectful
+- Share a quick win (e.g., "businesses like yours see 40% more customers with a simple website")
 - Offer something concrete (free consultation, quick demo)
-- Very brief — 50-80 words`,
+- Very brief — 50-80 words
+- Sign off as Emmanuel`,
 
-      final_follow_up: `Write a final follow-up email to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
-- This is the last email in the sequence
+      final_follow_up: `You are Emmanuel Kigen, a freelance web developer. Write a final follow-up email to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+- This is your last email
 - Be gracious and brief
 - Leave the door open
 - "No hard feelings if now isn't the right time"
-- 40-60 words max`,
+- 40-60 words max
+- Sign off as Emmanuel`,
     };
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -123,7 +126,7 @@ This is the first follow-up after our initial email went unanswered.
         messages: [
           {
             role: "system",
-            content: "You are an expert cold email copywriter specializing in B2B outreach for East African markets. You write emails that feel personal and genuine, not templated.",
+            content: "You are writing emails on behalf of Emmanuel Kigen, a freelance web developer doing personal outreach to East African businesses. Write emails that feel genuinely personal — like one person reaching out to another, not a company pitch.",
           },
           { role: "user", content: templatePrompts[template_type] || templatePrompts.first_touch },
         ],

@@ -105,21 +105,21 @@ const SettingsPage = () => {
         </Button>
       </div>
 
-      {/* Company Profile */}
+      {/* Your Profile */}
       <Card>
         <CardHeader>
-          <CardTitle>Company Profile</CardTitle>
-          <CardDescription>Your company details used in outreach emails</CardDescription>
+          <CardTitle>Your Profile</CardTitle>
+          <CardDescription>Your personal details used in outreach emails</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Company Name</Label>
-              <Input value={settings.company_name} onChange={(e) => setSettings((s) => ({ ...s, company_name: e.target.value }))} placeholder="Your Company" />
+              <Label>Your Name</Label>
+              <Input value={settings.company_name} onChange={(e) => setSettings((s) => ({ ...s, company_name: e.target.value }))} placeholder="Emmanuel Kigen" />
             </div>
             <div className="space-y-2">
-              <Label>Website</Label>
-              <Input value={settings.company_website} onChange={(e) => setSettings((s) => ({ ...s, company_website: e.target.value }))} placeholder="https://yourcompany.com" />
+              <Label>Your Website / Portfolio</Label>
+              <Input value={settings.company_website} onChange={(e) => setSettings((s) => ({ ...s, company_website: e.target.value }))} placeholder="https://yourportfolio.com" />
             </div>
           </div>
 
@@ -171,7 +171,7 @@ const SettingsPage = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Sender Email</Label>
-              <Input value={settings.sender_email} onChange={(e) => setSettings((s) => ({ ...s, sender_email: e.target.value }))} placeholder="outreach@yourcompany.com" />
+              <Input value={settings.sender_email} onChange={(e) => setSettings((s) => ({ ...s, sender_email: e.target.value }))} placeholder="emmanuelkigen029@gmail.com" />
             </div>
             <div className="space-y-2">
               <Label>Daily Send Limit</Label>

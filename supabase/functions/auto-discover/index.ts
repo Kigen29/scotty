@@ -159,7 +159,12 @@ Extract actual businesses (not directory pages). Category: ${category}. Location
         } catch { /* skip */ }
       }
 
-      // Insert new leads
+      // Insert new leads, auto-qualify, and generate first-touch emails
+      const senderName = userSettings.company_name || "Emmanuel Kigen";
+      const services = userSettings.services?.join(", ") || "web development, mobile apps, and digital solutions";
+      const portfolio = userSettings.portfolio_links?.join(", ") || "";
+      const signature = userSettings.email_signature || "Best regards,\nEmmanuel Kigen";
+
       for (const biz of businesses) {
         const { data: existing } = await supabase
           .from("leads")
@@ -168,20 +173,91 @@ Extract actual businesses (not directory pages). Category: ${category}. Location
           .eq("business_name", biz.business_name)
           .maybeSingle();
 
-        if (!existing) {
-          await supabase.from("leads").insert({
-            user_id: userSettings.user_id,
-            business_name: biz.business_name,
-            category: biz.category || category,
-            location: biz.location || location,
-            phone: biz.phone || null,
-            email: biz.email || null,
-            website_url: biz.website_url || null,
-            has_website: biz.has_website ?? false,
-            notes: biz.notes || null,
-            status: "discovered",
+        if (existing) continue;
+
+        // Insert lead as "qualified" (skip manual approval)
+        const { data: newLead, error: leadError } = await supabase.from("leads").insert({
+          user_id: userSettings.user_id,
+          business_name: biz.business_name,
+          category: biz.category || category,
+          location: biz.location || location,
+          phone: biz.phone || null,
+          email: biz.email || null,
+          website_url: biz.website_url || null,
+          has_website: biz.has_website ?? false,
+          notes: biz.notes || null,
+          status: "qualified",
+        }).select("id").single();
+
+        if (leadError || !newLead) continue;
+        totalDiscovered++;
+
+        // Only generate email if lead has an email address
+        if (!biz.email) continue;
+
+        // Generate first-touch email via AI
+        const emailPrompt = `You are Emmanuel Kigen, a freelance web developer reaching out personally to ${biz.business_name}, a ${biz.category || category} business in ${biz.location || location}.
+
+Write a compelling personal cold email:
+- They don't have a website, which means they're missing out on online customers
+- Reference their specific industry and how a website can help them
+- Present yourself as a freelance web developer who personally offers: ${services}
+${portfolio ? `- Mention your portfolio: ${portfolio}` : ""}
+- Keep it personal, warm, and genuine
+- End with a soft call-to-action (suggest a brief call or WhatsApp chat)
+- Sign off as Emmanuel Kigen
+${signature ? `- Use this signature: ${signature}` : ""}`;
+
+        try {
+          const emailAiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-3-flash-preview",
+              messages: [
+                { role: "system", content: "You are writing emails on behalf of Emmanuel Kigen, a freelance web developer doing personal outreach to East African businesses." },
+                { role: "user", content: emailPrompt },
+              ],
+              tools: [{
+                type: "function",
+                function: {
+                  name: "compose_email",
+                  description: "Compose the outreach email",
+                  parameters: {
+                    type: "object",
+                    properties: {
+                      subject: { type: "string" },
+                      body: { type: "string" },
+                    },
+                    required: ["subject", "body"],
+                    additionalProperties: false,
+                  },
+                },
+              }],
+              tool_choice: { type: "function", function: { name: "compose_email" } },
+            }),
           });
-          totalDiscovered++;
+
+          if (emailAiResponse.ok) {
+            const emailAiData = await emailAiResponse.json();
+            const emailToolCall = emailAiData.choices?.[0]?.message?.tool_calls?.[0];
+            if (emailToolCall?.function?.arguments) {
+              const email = JSON.parse(emailToolCall.function.arguments);
+              await supabase.from("email_campaigns").insert({
+                user_id: userSettings.user_id,
+                lead_id: newLead.id,
+                subject: email.subject,
+                body: email.body,
+                template_type: "first_touch",
+                status: "draft",
+              });
+            }
+          }
+        } catch (emailErr) {
+          console.error(`Email generation failed for ${biz.business_name}:`, emailErr);
         }
       }
 
@@ -189,7 +265,7 @@ Extract actual businesses (not directory pages). Category: ${category}. Location
       await supabase.from("activity_logs").insert({
         user_id: userSettings.user_id,
         action: "auto_discovery",
-        details: { category, location, leads_added: businesses.length },
+        details: { category, location, leads_added: totalDiscovered, autonomous: true },
       });
     }
 
