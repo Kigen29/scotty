@@ -21,6 +21,23 @@ const LeadDiscovery = () => {
   const [location, setLocation] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [generatingEmail, setGeneratingEmail] = useState<string | null>(null);
+
+  const generateEmail = async (leadId: string) => {
+    setGeneratingEmail(leadId);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-email", {
+        body: { lead_id: leadId, template_type: "first_touch" },
+      });
+      if (error) throw error;
+      toast({ title: "Email generated", description: "Draft email created — check Campaigns" });
+      fetchLeads();
+    } catch (error: any) {
+      toast({ title: "Generation failed", description: error.message, variant: "destructive" });
+    } finally {
+      setGeneratingEmail(null);
+    }
+  };
 
   useEffect(() => {
     if (user) fetchLeads();
@@ -156,16 +173,24 @@ const LeadDiscovery = () => {
                 )}
               </div>
 
-              {lead.status === "discovered" && (
-                <div className="flex gap-2 mt-4">
-                  <Button size="sm" onClick={() => updateLeadStatus(lead.id, "qualified")} className="flex-1">
-                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+              <div className="flex gap-2 mt-4">
+                {lead.status === "discovered" && (
+                  <>
+                    <Button size="sm" onClick={() => updateLeadStatus(lead.id, "qualified")} className="flex-1">
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => updateLeadStatus(lead.id, "dismissed")}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </>
+                )}
+                {lead.status === "qualified" && (
+                  <Button size="sm" onClick={() => generateEmail(lead.id)} disabled={generatingEmail === lead.id} className="flex-1">
+                    {generatingEmail === lead.id ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Mail className="h-3.5 w-3.5 mr-1" />}
+                    Generate Email
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => updateLeadStatus(lead.id, "dismissed")}>
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              )}
+                )}
+              </div>
             </CardContent>
           </Card>
         ))}
