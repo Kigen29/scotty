@@ -88,14 +88,24 @@ Deno.serve(async (req) => {
     }
 
     const extractionPrompt = `You are analyzing web search results to extract Kenyan business leads.
-We are specifically looking for businesses that do NOT have their own website.
 
-IMPORTANT RULES:
-- If a business has its own domain/professional website, set has_website to true. These are LOW priority.
-- If a business is only found on directories (Google Maps, Yellow Pages, Facebook, Jumia, etc.), set has_website to false. These are our PRIMARY targets.
-- Focus on small/local businesses that would benefit from getting a website built for them.
-- Skip large chains or well-known franchises.
-- Only include actual businesses, not directory pages or articles themselves.
+CRITICAL RULES FOR has_website:
+- ONLY set has_website to false if the business has ZERO web presence of its own (no domain, no website at all).
+- If the result URL is the business's OWN domain (e.g. businessname.co.ke, businessname.com), set has_website to TRUE.
+- If the business is found on a directory (Google Maps, Yellow Pages, Facebook page, Jumia, etc.) BUT you can see they also have their own website linked or mentioned, set has_website to TRUE.
+- If the business ONLY appears on directories with NO own website mentioned anywhere, set has_website to false.
+- When in doubt, set has_website to true. We want ACCURACY over volume.
+
+CRITICAL RULES FOR email:
+- EXTRACT every email address you can find in the content, title, or description.
+- Look carefully in the markdown content for patterns like name@domain.com, info@, contact@, etc.
+- Also extract phone numbers — these are very important for leads without email.
+- If no email is found, set email to an empty string, do NOT make one up.
+
+CRITICAL RULES FOR quality:
+- Skip large chains, franchises, or well-known brands.
+- Only include actual businesses, not the directory pages themselves.
+- Include the business location as specifically as possible (neighborhood, town).
 
 Search results:
 ${results.map((r: any, i: number) => `
@@ -103,7 +113,7 @@ Result ${i + 1}:
 URL: ${r.url}
 Title: ${r.title || ""}
 Description: ${r.description || ""}
-Content: ${(r.markdown || "").substring(0, 500)}
+Content: ${(r.markdown || "").substring(0, 800)}
 `).join("\n")}
 
 Extract businesses and return them using the extract_businesses function.
