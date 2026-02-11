@@ -111,18 +111,24 @@ const Campaigns = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       {campaign.status === "draft" && (
-                        <Button
-                          size="sm"
-                          onClick={(e) => sendEmail(e, campaign.id)}
-                          disabled={sendingId === campaign.id}
-                        >
-                          {sendingId === campaign.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                          ) : (
-                            <Send className="h-3.5 w-3.5 mr-1" />
-                          )}
-                          Send
-                        </Button>
+                        (campaign as any).leads?.email ? (
+                          <Button
+                            size="sm"
+                            onClick={(e) => sendEmail(e, campaign.id)}
+                            disabled={sendingId === campaign.id}
+                          >
+                            {sendingId === campaign.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                            ) : (
+                              <Send className="h-3.5 w-3.5 mr-1" />
+                            )}
+                            Send
+                          </Button>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">
+                            No email
+                          </Badge>
+                        )
                       )}
                       <span className="text-xs text-muted-foreground">
                         {new Date(campaign.created_at).toLocaleDateString()}
@@ -158,9 +164,13 @@ const Campaigns = () => {
                 {selectedEmail.opened_at && <span>Opened: {new Date(selectedEmail.opened_at).toLocaleString()}</span>}
               </div>
               {selectedEmail.status === "draft" && (
-                <Button onClick={(e) => { sendEmail(e, selectedEmail.id); setSelectedEmail(null); }} disabled={sendingId === selectedEmail.id}>
-                  <Send className="h-4 w-4 mr-2" /> Send Email
-                </Button>
+                (campaigns.find(c => c.id === selectedEmail.id) as any)?.leads?.email ? (
+                  <Button onClick={(e) => { sendEmail(e, selectedEmail.id); setSelectedEmail(null); }} disabled={sendingId === selectedEmail.id}>
+                    <Send className="h-4 w-4 mr-2" /> Send Email
+                  </Button>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Cannot send — lead has no email address.</p>
+                )
               )}
             </div>
           )}
