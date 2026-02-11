@@ -81,9 +81,9 @@ const Dashboard = () => {
 
   const metricCards = [
     { label: "Total Leads", value: stats.totalLeads, icon: Users, color: "text-primary" },
-    { label: "Emails Sent", value: stats.emailsSent, icon: Mail, color: "text-[hsl(var(--info))]", sub: `${stats.drafts} drafts` },
-    { label: "Response Rate", value: `${stats.responseRate}%`, icon: MessageSquare, color: "text-[hsl(var(--warning))]" },
-    { label: "Interested", value: stats.interested, icon: TrendingUp, color: "text-[hsl(var(--success))]" },
+    { label: "Emails Sent", value: stats.emailsSent, icon: Mail, color: "text-blue-500 dark:text-blue-400", sub: `${stats.drafts} drafts` },
+    { label: "Response Rate", value: `${stats.responseRate}%`, icon: MessageSquare, color: "text-amber-500 dark:text-amber-400" },
+    { label: "Interested", value: stats.interested, icon: TrendingUp, color: "text-emerald-500 dark:text-emerald-400" },
   ];
 
   return (

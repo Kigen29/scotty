@@ -58,13 +58,13 @@ const Campaigns = () => {
   };
 
   const statusColor: Record<string, string> = {
-    draft: "bg-muted text-muted-foreground",
-    scheduled: "bg-[hsl(var(--info))]/10 text-[hsl(var(--info))]",
-    sent: "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]",
-    opened: "bg-primary/10 text-primary",
-    replied: "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]",
-    bounced: "bg-destructive/10 text-destructive",
-    failed: "bg-destructive/10 text-destructive",
+    draft: "bg-secondary text-secondary-foreground",
+    scheduled: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
+    sent: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+    opened: "bg-primary/15 text-primary",
+    replied: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+    bounced: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+    failed: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
   };
 
   const templateLabel: Record<string, string> = {
