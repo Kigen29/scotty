@@ -1,46 +1,91 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { BarChart3, Download, TrendingUp, Mail, Users, MessageSquare } from "lucide-react";
-import type { Tables } from "@/integrations/supabase/types";
+import { Download, TrendingUp, TrendingDown, Mail, Users, MessageSquare, Flame, Star } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 const Reports = () => {
   const { user } = useAuth();
-  const [leads, setLeads] = useState<Tables<"leads">[]>([]);
-  const [campaigns, setCampaigns] = useState<Tables<"email_campaigns">[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [activities, setActivities] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) return;
     const fetchData = async () => {
-      const [{ data: l }, { data: c }] = await Promise.all([
+      const [{ data: l }, { data: c }, { data: a }] = await Promise.all([
         supabase.from("leads").select("*").eq("user_id", user.id),
         supabase.from("email_campaigns").select("*").eq("user_id", user.id),
+        supabase.from("activity_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(200),
       ]);
       if (l) setLeads(l);
       if (c) setCampaigns(c);
+      if (a) setActivities(a);
     };
     fetchData();
   }, [user]);
 
   const totalEmails = campaigns.length;
   const sentEmails = campaigns.filter((c) => c.status !== "draft").length;
-  const openedEmails = campaigns.filter((c) => c.status === "opened" || c.status === "replied").length;
   const repliedEmails = campaigns.filter((c) => c.status === "replied").length;
   const responseRate = sentEmails > 0 ? ((repliedEmails / sentEmails) * 100).toFixed(1) : "0";
 
+  // Week-over-week trends
+  const now = new Date();
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+  const thisWeekLeads = leads.filter((l) => new Date(l.created_at) >= oneWeekAgo).length;
+  const lastWeekLeads = leads.filter((l) => new Date(l.created_at) >= twoWeeksAgo && new Date(l.created_at) < oneWeekAgo).length;
+  const leadsTrend = lastWeekLeads > 0 ? Math.round(((thisWeekLeads - lastWeekLeads) / lastWeekLeads) * 100) : thisWeekLeads > 0 ? 100 : 0;
+
+  const thisWeekEmails = campaigns.filter((c) => c.sent_at && new Date(c.sent_at) >= oneWeekAgo).length;
+  const lastWeekEmails = campaigns.filter((c) => c.sent_at && new Date(c.sent_at) >= twoWeeksAgo && new Date(c.sent_at) < oneWeekAgo).length;
+  const emailsTrend = lastWeekEmails > 0 ? Math.round(((thisWeekEmails - lastWeekEmails) / lastWeekEmails) * 100) : thisWeekEmails > 0 ? 100 : 0;
+
+  // Daily activity chart (last 7 days)
+  const dailyData = Array.from({ length: 7 }).map((_, i) => {
+    const date = new Date(now.getTime() - (6 - i) * 24 * 60 * 60 * 1000);
+    const dayStr = date.toISOString().split("T")[0];
+    const dayLabel = date.toLocaleDateString("en", { weekday: "short" });
+    const discovered = activities.filter((a) => a.action.includes("discover") && a.created_at.startsWith(dayStr)).length;
+    const emailsSent = activities.filter((a) => a.action.includes("email_sent") && a.created_at.startsWith(dayStr)).length;
+    return { day: dayLabel, discovered, sent: emailsSent };
+  });
+
+  // Hot leads
+  const hotLeads = leads
+    .filter((l: any) => l.status === "interested" || (l.priority_score && l.priority_score >= 8))
+    .sort((a: any, b: any) => (b.priority_score || 0) - (a.priority_score || 0))
+    .slice(0, 5);
+
   const funnelStages = [
-    { label: "Discovered", count: leads.length, color: "bg-muted" },
-    { label: "Contacted", count: leads.filter((l) => ["contacted", "responded", "interested", "not_interested", "converted"].includes(l.status)).length, color: "bg-[hsl(var(--info))]" },
-    { label: "Responded", count: leads.filter((l) => ["responded", "interested", "not_interested", "converted"].includes(l.status)).length, color: "bg-[hsl(var(--warning))]" },
-    { label: "Interested", count: leads.filter((l) => ["interested", "converted"].includes(l.status)).length, color: "bg-primary" },
-    { label: "Converted", count: leads.filter((l) => l.status === "converted").length, color: "bg-[hsl(var(--success))]" },
+    { label: "Discovered", count: leads.length, color: "hsl(var(--muted-foreground))" },
+    { label: "Contacted", count: leads.filter((l) => ["contacted", "responded", "interested", "not_interested", "converted"].includes(l.status)).length, color: "hsl(var(--primary))" },
+    { label: "Responded", count: leads.filter((l) => ["responded", "interested", "not_interested", "converted"].includes(l.status)).length, color: "hsl(220 80% 55%)" },
+    { label: "Interested", count: leads.filter((l) => ["interested", "converted"].includes(l.status)).length, color: "hsl(142 70% 45%)" },
+    { label: "Converted", count: leads.filter((l) => l.status === "converted").length, color: "hsl(45 90% 50%)" },
   ];
 
+  const TrendIndicator = ({ value }: { value: number }) => {
+    if (value === 0) return null;
+    return value > 0 ? (
+      <span className="flex items-center gap-0.5 text-xs text-emerald-600 dark:text-emerald-400">
+        <TrendingUp className="h-3 w-3" /> +{value}%
+      </span>
+    ) : (
+      <span className="flex items-center gap-0.5 text-xs text-red-500">
+        <TrendingDown className="h-3 w-3" /> {value}%
+      </span>
+    );
+  };
+
   const exportCSV = () => {
-    const headers = ["Business Name", "Category", "Location", "Email", "Phone", "Status", "Discovered At"];
-    const rows = leads.map((l) => [l.business_name, l.category, l.location, l.email, l.phone, l.status, l.discovered_at]);
+    const headers = ["Business Name", "Category", "Location", "Email", "Phone", "Status", "Priority", "Discovered At"];
+    const rows = leads.map((l: any) => [l.business_name, l.category, l.location, l.email, l.phone, l.status, l.priority_score || 5, l.discovered_at]);
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -62,25 +107,78 @@ const Reports = () => {
         </Button>
       </div>
 
-      {/* Metrics */}
+      {/* Metrics with trends */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
-          { label: "Total Emails", value: totalEmails, icon: Mail },
-          { label: "Sent", value: sentEmails, icon: TrendingUp },
-          { label: "Response Rate", value: `${responseRate}%`, icon: MessageSquare },
-          { label: "Total Leads", value: leads.length, icon: Users },
+          { label: "Total Emails", value: totalEmails, icon: Mail, trend: emailsTrend },
+          { label: "Sent", value: sentEmails, icon: TrendingUp, trend: emailsTrend },
+          { label: "Response Rate", value: `${responseRate}%`, icon: MessageSquare, trend: 0 },
+          { label: "Total Leads", value: leads.length, icon: Users, trend: leadsTrend },
         ].map((m) => (
           <Card key={m.label}>
             <CardContent className="p-6 flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">{m.label}</p>
                 <p className="text-2xl font-bold mt-1">{m.value}</p>
+                <TrendIndicator value={m.trend} />
               </div>
               <m.icon className="h-6 w-6 text-muted-foreground" />
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* Daily Activity Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Daily Activity (Last 7 Days)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={dailyData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+              <XAxis dataKey="day" className="text-xs fill-muted-foreground" />
+              <YAxis className="text-xs fill-muted-foreground" />
+              <RechartsTooltip
+                contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
+                labelStyle={{ color: "hsl(var(--foreground))" }}
+              />
+              <Bar dataKey="discovered" name="Discovered" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="sent" name="Emails Sent" fill="hsl(220 80% 55%)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Hot Leads */}
+      {hotLeads.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Flame className="h-5 w-5 text-orange-500" /> Hot Leads
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {hotLeads.map((lead: any) => (
+                <div key={lead.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                  <div>
+                    <p className="font-medium text-sm">{lead.business_name}</p>
+                    <p className="text-xs text-muted-foreground">{lead.category} • {lead.location}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">{lead.status}</Badge>
+                    <div className="flex items-center gap-0.5">
+                      <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+                      <span className="text-xs font-medium">{lead.priority_score || 5}/10</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Funnel */}
       <Card>
@@ -97,10 +195,10 @@ const Reports = () => {
                   <span className="text-sm w-24 text-muted-foreground">{stage.label}</span>
                   <div className="flex-1 h-8 bg-muted rounded-lg overflow-hidden">
                     <div
-                      className={`h-full ${stage.color} rounded-lg flex items-center px-3 transition-all`}
-                      style={{ width: `${width}%` }}
+                      className="h-full rounded-lg flex items-center px-3 transition-all"
+                      style={{ width: `${width}%`, backgroundColor: stage.color }}
                     >
-                      <span className="text-xs font-medium text-primary-foreground">{stage.count}</span>
+                      <span className="text-xs font-medium text-white">{stage.count}</span>
                     </div>
                   </div>
                 </div>
@@ -125,7 +223,7 @@ const Reports = () => {
               }, {} as Record<string, number>)
             ).map(([cat, count]) => (
               <div key={cat} className="p-4 rounded-lg bg-muted text-center">
-                <p className="text-2xl font-bold">{count}</p>
+                <p className="text-2xl font-bold">{count as number}</p>
                 <p className="text-xs text-muted-foreground capitalize">{cat}</p>
               </div>
             ))}

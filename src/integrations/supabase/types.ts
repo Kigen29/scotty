@@ -131,6 +131,7 @@ export type Database = {
       }
       leads: {
         Row: {
+          analysis: Json | null
           business_name: string
           category: string | null
           created_at: string
@@ -141,13 +142,16 @@ export type Database = {
           location: string | null
           notes: string | null
           phone: string | null
+          priority_score: number | null
           social_links: Json | null
           status: string
+          unsubscribed: boolean | null
           updated_at: string
           user_id: string
           website_url: string | null
         }
         Insert: {
+          analysis?: Json | null
           business_name: string
           category?: string | null
           created_at?: string
@@ -158,13 +162,16 @@ export type Database = {
           location?: string | null
           notes?: string | null
           phone?: string | null
+          priority_score?: number | null
           social_links?: Json | null
           status?: string
+          unsubscribed?: boolean | null
           updated_at?: string
           user_id: string
           website_url?: string | null
         }
         Update: {
+          analysis?: Json | null
           business_name?: string
           category?: string | null
           created_at?: string
@@ -175,8 +182,10 @@ export type Database = {
           location?: string | null
           notes?: string | null
           phone?: string | null
+          priority_score?: number | null
           social_links?: Json | null
           status?: string
+          unsubscribed?: boolean | null
           updated_at?: string
           user_id?: string
           website_url?: string | null
@@ -196,6 +205,7 @@ export type Database = {
           id: string
           is_autonomous: boolean | null
           portfolio_links: string[] | null
+          portfolio_projects: Json | null
           sender_email: string | null
           services: string[] | null
           target_categories: string[] | null
@@ -215,6 +225,7 @@ export type Database = {
           id?: string
           is_autonomous?: boolean | null
           portfolio_links?: string[] | null
+          portfolio_projects?: Json | null
           sender_email?: string | null
           services?: string[] | null
           target_categories?: string[] | null
@@ -234,6 +245,7 @@ export type Database = {
           id?: string
           is_autonomous?: boolean | null
           portfolio_links?: string[] | null
+          portfolio_projects?: Json | null
           sender_email?: string | null
           services?: string[] | null
           target_categories?: string[] | null

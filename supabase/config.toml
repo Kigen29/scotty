@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.auto-follow-up]
 verify_jwt = false
+
+[functions.analyze-lead]
+verify_jwt = false
+
+[functions.classify-response]
+verify_jwt = false

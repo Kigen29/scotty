@@ -8,7 +8,14 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Plus, X } from "lucide-react";
+import { Save, Plus, X, Globe, Briefcase } from "lucide-react";
+
+interface PortfolioProject {
+  url: string;
+  industry: string;
+  features: string;
+  problem_solved: string;
+}
 
 const SettingsPage = () => {
   const { user } = useAuth();
@@ -29,6 +36,7 @@ const SettingsPage = () => {
     active_hours_end: "17:00",
     is_autonomous: true,
   });
+  const [portfolioProjects, setPortfolioProjects] = useState<PortfolioProject[]>([]);
   const [newService, setNewService] = useState("");
   const [newPortfolio, setNewPortfolio] = useState("");
   const [newCategory, setNewCategory] = useState("");
@@ -61,6 +69,7 @@ const SettingsPage = () => {
         active_hours_end: data.active_hours_end || "17:00",
         is_autonomous: data.is_autonomous ?? true,
       });
+      setPortfolioProjects((data as any).portfolio_projects || []);
     }
   };
 
@@ -73,7 +82,8 @@ const SettingsPage = () => {
         .upsert({
           user_id: user.id,
           ...settings,
-        }, { onConflict: "user_id" });
+          portfolio_projects: portfolioProjects,
+        } as any, { onConflict: "user_id" });
       if (error) throw error;
       toast({ title: "Settings saved" });
     } catch (error: any) {
@@ -91,6 +101,18 @@ const SettingsPage = () => {
 
   const removeFromList = (key: keyof typeof settings, index: number) => {
     setSettings((s) => ({ ...s, [key]: (s[key] as string[]).filter((_, i) => i !== index) }));
+  };
+
+  const addPortfolioProject = () => {
+    setPortfolioProjects((p) => [...p, { url: "", industry: "", features: "", problem_solved: "" }]);
+  };
+
+  const updatePortfolioProject = (index: number, field: keyof PortfolioProject, value: string) => {
+    setPortfolioProjects((p) => p.map((proj, i) => i === index ? { ...proj, [field]: value } : proj));
+  };
+
+  const removePortfolioProject = (index: number) => {
+    setPortfolioProjects((p) => p.filter((_, i) => i !== index));
   };
 
   return (
@@ -139,7 +161,7 @@ const SettingsPage = () => {
             </div>
           </div>
 
-          {/* Portfolio */}
+          {/* Portfolio Links */}
           <div className="space-y-2">
             <Label>Portfolio Links</Label>
             <div className="flex gap-2">
@@ -148,7 +170,7 @@ const SettingsPage = () => {
             </div>
             <div className="flex flex-wrap gap-2 mt-2">
               {settings.portfolio_links.map((l, i) => (
-                <span key={i} className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[hsl(var(--info))]/10 text-[hsl(var(--info))] text-sm">
+                <span key={i} className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-accent text-accent-foreground text-sm">
                   {l} <button onClick={() => removeFromList("portfolio_links", i)}><X className="h-3 w-3" /></button>
                 </span>
               ))}
@@ -159,6 +181,74 @@ const SettingsPage = () => {
             <Label>Email Signature</Label>
             <Textarea value={settings.email_signature} onChange={(e) => setSettings((s) => ({ ...s, email_signature: e.target.value }))} placeholder="Your professional email signature..." rows={4} />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Portfolio Projects */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Briefcase className="h-5 w-5" /> Portfolio Projects
+              </CardTitle>
+              <CardDescription>Your completed projects — AI agents reference these when crafting personalized emails</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={addPortfolioProject}>
+              <Plus className="h-4 w-4 mr-1" /> Add Project
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {portfolioProjects.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No portfolio projects yet. Add your completed projects so the AI can reference them in outreach emails.
+            </p>
+          )}
+          {portfolioProjects.map((project, i) => (
+            <div key={i} className="relative p-4 rounded-lg border border-border space-y-3">
+              <button
+                onClick={() => removePortfolioProject(i)}
+                className="absolute top-2 right-2 p-1 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Project URL</Label>
+                  <Input
+                    value={project.url}
+                    onChange={(e) => updatePortfolioProject(i, "url", e.target.value)}
+                    placeholder="https://heartbeatsafaris.com"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Industry</Label>
+                  <Input
+                    value={project.industry}
+                    onChange={(e) => updatePortfolioProject(i, "industry", e.target.value)}
+                    placeholder="Tourism & Travel"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Key Features</Label>
+                <Input
+                  value={project.features}
+                  onChange={(e) => updatePortfolioProject(i, "features", e.target.value)}
+                  placeholder="Online booking, payment integration, mobile responsive"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Problem Solved</Label>
+                <Input
+                  value={project.problem_solved}
+                  onChange={(e) => updatePortfolioProject(i, "problem_solved", e.target.value)}
+                  placeholder="Enabled online bookings, increasing revenue by 40%"
+                />
+              </div>
+            </div>
+          ))}
         </CardContent>
       </Card>
 
