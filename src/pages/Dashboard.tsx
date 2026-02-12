@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Users, Mail, MessageSquare, TrendingUp, Eye, XCircle, CheckCircle2, Search, Send, Zap, RefreshCw } from "lucide-react";
+import { Users, Mail, MessageSquare, TrendingUp, Eye, XCircle, CheckCircle2, Search, Send, Zap, RefreshCw, Flame, Star } from "lucide-react";
 
 const activityLabels: Record<string, { label: string; icon: React.ReactNode }> = {
   leads_discovered: { label: "Discovered leads", icon: <Search className="h-3.5 w-3.5" /> },
@@ -12,6 +12,7 @@ const activityLabels: Record<string, { label: string; icon: React.ReactNode }> =
   email_sent: { label: "Email sent", icon: <Send className="h-3.5 w-3.5" /> },
   auto_email_sent: { label: "Auto-sent email", icon: <Send className="h-3.5 w-3.5" /> },
   follow_up_generated: { label: "Follow-up drafted", icon: <RefreshCw className="h-3.5 w-3.5" /> },
+  response_classified: { label: "Response classified", icon: <MessageSquare className="h-3.5 w-3.5" /> },
 };
 
 const formatDetails = (action: string, details: any): string => {
@@ -26,6 +27,8 @@ const formatDetails = (action: string, details: any): string => {
     case "email_sent":
     case "auto_email_sent":
       return `To ${details.business_name || details.to || "lead"}`;
+    case "response_classified":
+      return `${details.business_name || "Lead"} — ${details.classification || ""}`;
     default:
       return JSON.stringify(details);
   }
@@ -45,13 +48,14 @@ const Dashboard = () => {
     responseRate: 0,
   });
   const [activities, setActivities] = useState<any[]>([]);
+  const [hotLeads, setHotLeads] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) return;
 
     const fetchStats = async () => {
       const [{ data: leads }, { data: emails }, { data: logs }] = await Promise.all([
-        supabase.from("leads").select("status").eq("user_id", user.id),
+        supabase.from("leads").select("*").eq("user_id", user.id),
         supabase.from("email_campaigns").select("status").eq("user_id", user.id),
         supabase.from("activity_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20),
       ]);
@@ -71,6 +75,13 @@ const Dashboard = () => {
           drafts: emails?.filter((e) => e.status === "draft").length || 0,
           responseRate: contacted > 0 ? Math.round((responded / contacted) * 100) : 0,
         });
+
+        // Hot leads: interested OR high priority score
+        const hot = leads
+          .filter((l: any) => l.status === "interested" || (l.priority_score && l.priority_score >= 8))
+          .sort((a: any, b: any) => (b.priority_score || 0) - (a.priority_score || 0))
+          .slice(0, 5);
+        setHotLeads(hot);
       }
 
       if (logs) setActivities(logs);
@@ -136,6 +147,40 @@ const Dashboard = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Hot Leads */}
+      {hotLeads.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Flame className="h-5 w-5 text-orange-500" /> Hot Leads
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {hotLeads.map((lead: any) => (
+                <div key={lead.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <p className="font-medium text-sm">{lead.business_name}</p>
+                      <p className="text-xs text-muted-foreground">{lead.category} • {lead.location}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge className={`text-xs border-0 ${lead.status === "interested" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"}`}>
+                      {lead.status === "interested" ? "Interested" : "High Priority"}
+                    </Badge>
+                    <div className="flex items-center gap-0.5">
+                      <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+                      <span className="text-xs font-medium">{lead.priority_score || 5}/10</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

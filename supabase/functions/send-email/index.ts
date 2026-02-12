@@ -100,11 +100,14 @@ Deno.serve(async (req) => {
 
     console.log(`Sending email to ${recipientEmail} from ${senderEmail}`);
 
+    // Append unsubscribe footer
+    const bodyWithFooter = campaign.body + "\n\n---\nReply STOP to unsubscribe.";
+
     const emailResponse = await resend.emails.send({
       from: `${fromName} <${senderEmail}>`,
       to: [recipientEmail],
       subject: campaign.subject,
-      text: campaign.body,
+      text: bodyWithFooter,
     });
 
     console.log("Email sent:", emailResponse);

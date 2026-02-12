@@ -76,13 +76,15 @@ Deno.serve(async (req) => {
       for (const campaign of draftCampaigns || []) {
         const lead = (campaign as any).leads;
         if (!lead?.email) continue;
+        if (lead?.unsubscribed) continue; // Skip unsubscribed leads
 
         try {
+          const bodyWithFooter = campaign.body + "\n\n---\nReply STOP to unsubscribe.";
           await resend.emails.send({
             from: `${senderName} <${senderEmail}>`,
             to: [lead.email],
             subject: campaign.subject,
-            text: campaign.body,
+            text: bodyWithFooter,
           });
 
           await supabase.from("email_campaigns").update({
@@ -112,6 +114,7 @@ Deno.serve(async (req) => {
         .eq("status", "contacted");
 
       for (const lead of contactedLeads || []) {
+        if ((lead as any).unsubscribed) continue; // Skip unsubscribed leads
         // Get existing campaigns for this lead
         const { data: existingCampaigns } = await supabase
           .from("email_campaigns")

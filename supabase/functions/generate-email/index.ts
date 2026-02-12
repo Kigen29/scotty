@@ -72,6 +72,22 @@ Deno.serve(async (req) => {
     const portfolio = settings?.portfolio_links?.join(", ") || "";
     const signature = settings?.email_signature || `Best regards,\nEmmanuel Kigen`;
 
+    // Get portfolio projects for industry-matched references
+    const portfolioProjects = (settings as any)?.portfolio_projects || [];
+    const matchedProjects = portfolioProjects.filter((p: any) =>
+      p.industry && lead.category && p.industry.toLowerCase().includes(lead.category.toLowerCase())
+    );
+    const portfolioContext = matchedProjects.length > 0
+      ? `\n- Reference these relevant projects you've built:\n${matchedProjects.map((p: any) => `  * ${p.url} (${p.industry}): ${p.problem_solved}`).join("\n")}`
+      : portfolio ? `\n- Mention your portfolio: ${portfolio}` : "";
+
+    // Get lead analysis if available
+    const analysisData = (lead as any).analysis;
+    const analysisContext = analysisData
+      ? `\n- Use these specific pain points: ${(analysisData.pain_points || []).join("; ")}
+- Propose these solutions: ${(analysisData.recommended_solutions || []).join("; ")}`
+      : "";
+
     const templatePrompts: Record<string, string> = {
       first_touch: `You are Emmanuel Kigen, a freelance web developer reaching out personally to ${lead.business_name}, a ${lead.category || "business"} in ${lead.location || "Kenya"}.
 
@@ -79,8 +95,7 @@ Write a compelling personal cold email:
 - They ${lead.has_website ? "have a basic website" : "don't have a website"}, which means they're missing out on online customers
 - Reference their specific industry and how a website/digital presence can help them
 - Mention specific pain points for ${lead.category || "their"} businesses (e.g., manual booking, no online ordering, no customer reviews visibility)
-- Present yourself as a freelance web developer who personally offers: ${services}
-${portfolio ? `- Mention your portfolio: ${portfolio}` : ""}
+- Present yourself as a freelance web developer who personally offers: ${services}${portfolioContext}${analysisContext}
 - Keep it personal, warm, and genuine — you're a real person reaching out, not a company
 - End with a soft call-to-action (suggest a brief call or WhatsApp chat)
 - Sign off as Emmanuel Kigen
