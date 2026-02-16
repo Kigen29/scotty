@@ -1,106 +1,156 @@
 
 
-# Plan: Implement Multi-Agent System from Specification
+# ScoutAgent: Multi-Channel Autonomous Pipeline Upgrade
 
 ## Overview
-Enhance the existing system to match the uploaded specification by adding the missing agent capabilities, portfolio data, and improved lead intelligence.
+This plan adds social media discovery, multi-channel outreach intelligence, smarter autonomous lead selection, date-based filtering across all pages, and a sidebar styling fix.
 
-## Phase 1: Portfolio Database and Better Email Personalization
+---
 
-### 1A. Add portfolio data to settings
-Store your actual projects (heartbeatsafaris.com, rangautiles.com, lakevictoriaaquaculture.com, itchyfeet.co.ke) in a structured format so AI agents can reference relevant examples when crafting emails.
+## 1. Database Changes
 
-- Add a `portfolio_projects` JSONB column to the `settings` table
-- Pre-populate with your projects: industry, URL, features, problem solved
-- Update the email generation prompts in `generate-email` and `auto-discover` to include relevant portfolio examples matched by industry
+Add new columns to support social media discovery and multi-channel contact methods:
 
-### 1B. Update Settings Page UI
-- Add a "Portfolio Projects" section where you can add/edit projects with fields: URL, Industry, Features, Problem Solved
-- Display them as editable cards
+**`leads` table updates:**
+- `discovery_source` (text, default `'web'`) -- tracks where the lead was found: `web`, `instagram`, `tiktok`, `linkedin`
+- `contact_channels` (jsonb, default `'[]'`) -- structured list of available contact methods, e.g. `[{"type": "email", "value": "..."}, {"type": "whatsapp", "value": "..."}, {"type": "instagram_dm", "handle": "..."}, {"type": "linkedin", "url": "..."}]`
+- `social_links` column already exists but is underutilized -- we will populate it with Instagram/TikTok/LinkedIn URLs
 
-## Phase 2: Analyst Agent (Business Intelligence)
+**`email_campaigns` table updates:**
+- `channel` (text, default `'email'`) -- the outreach channel used: `email`, `whatsapp`, `instagram_dm`, `linkedin`
+- This lets the Campaigns page show all outreach types, not just email
 
-### 2A. Create `analyze-lead` edge function
-A new edge function that takes a lead ID and performs deeper research:
-- Uses Firecrawl to scrape the lead's social media or directory listing (if URL exists)
-- Uses AI to identify specific pain points for that business type
-- Matches the business to relevant portfolio projects
-- Generates a priority score (1-10) based on: no website, has email, business size signals, industry fit
-- Stores analysis results in a new `lead_analysis` column (JSONB) on the leads table
+---
 
-### 2B. Auto-trigger analysis
-- In `auto-discover`, after inserting a lead, call the analysis logic inline before generating the email
-- This way emails reference specific pain points and relevant portfolio examples
+## 2. Social Media Discovery Agent
 
-### Database changes:
-- Add `priority_score` (integer, default 5) column to `leads` table
-- Add `analysis` (JSONB, nullable) column to `leads` table for storing pain points, recommended solutions, matched portfolio projects
+**New edge function: `supabase/functions/social-discover/index.ts`**
 
-## Phase 3: Engagement Agent (Response Handling)
+Uses Firecrawl search to find Kenyan businesses on Instagram and TikTok:
+- Search queries like `"site:instagram.com ${category} ${location} Kenya"` and `"site:tiktok.com ${category} ${location} Kenya business"`
+- AI extracts business name, handle, bio info, any contact details (email in bio, phone, WhatsApp link)
+- Inserts leads with `discovery_source: 'instagram'` or `'tiktok'` and populates `social_links` and `contact_channels`
+- Runs inline analysis (same as current auto-discover) to score and enrich each lead
+- Registered in `config.toml` with `verify_jwt = false`
 
-### 3A. Create `classify-response` edge function
-When a reply comes in (manually logged or via future webhook):
-- AI classifies the response: interested, questions, not_now, not_interested, objection
-- Generates an appropriate reply draft
-- Updates lead status automatically
-- Flags "interested" leads for human review
+**Update `supabase/functions/auto-discover/index.ts`:**
+- After the existing web discovery loop, add a second pass that calls the social media search logic (Instagram + TikTok)
+- Alternates between web and social sources on each cron run to avoid redundancy
 
-### 3B. Add Conversations UI improvements
-- Show response classification badges
-- Show AI-suggested replies
-- Add a "Hot Leads" filter on Dashboard for leads classified as "interested"
+---
 
-## Phase 4: Enhanced Reporting
+## 3. Smart Daily Outreach Agent
 
-### 4A. Improve Reports page
-- Add week-over-week trend indicators
-- Add "Hot Leads" section showing interested/high-priority leads
-- Fix funnel bar colors for better contrast (same issue as before with HSL variables)
-- Add daily activity chart using recharts (already installed)
+**New edge function: `supabase/functions/daily-outreach/index.ts`**
 
-## Phase 5: Email Best Practices from Spec
+This runs daily (or can be called by auto-follow-up) and:
+1. Queries all leads with status `qualified` or `discovered` that were found today or have no outreach yet
+2. Sorts by `priority_score` descending, picks the top N leads (based on `daily_send_limit`)
+3. For each lead, determines the best contact channel:
+   - If `email` exists: generate and queue an email (existing flow)
+   - If no email but `phone` exists: generate a WhatsApp message template and store as a campaign with `channel: 'whatsapp'` (user sends manually or via WhatsApp Business API later)
+   - If no email/phone but has Instagram handle: generate an Instagram DM draft with `channel: 'instagram_dm'`
+   - If LinkedIn profile exists: generate a LinkedIn connection message with `channel: 'linkedin'`
+4. Auto-sends email campaigns via Resend (existing flow)
+5. Non-email channels are saved as `draft` for the user to copy-paste or send manually (with clear instructions in the UI)
 
-### 5A. Add unsubscribe handling
-- Append "Reply STOP to unsubscribe" to all outgoing emails
-- Add an `unsubscribed` boolean column to leads table
-- In `auto-follow-up` and `send-email`, skip leads where `unsubscribed = true`
+**Update `auto-discover` to call `daily-outreach` logic at the end** so the full pipeline is: Discover -> Analyze -> Pick Hottest -> Draft Messages -> Send Emails.
 
-### 5B. Email warm-up logic
-- Start with lower daily limits (20/day for first week)
-- Add a `created_at` check on settings to auto-calculate warm-up phase
-- Gradually increase sending volume
+---
+
+## 4. Multi-Channel UI in Campaigns Page
+
+Update `src/pages/Campaigns.tsx`:
+- Add channel icons (Mail, Phone, Instagram icon, LinkedIn icon) next to each campaign
+- Filter tabs: All | Email | WhatsApp | Instagram DM | LinkedIn
+- For non-email drafts, show a "Copy Message" button instead of "Send" since those channels require manual sending
+- Show the contact handle/number the message is addressed to
+
+---
+
+## 5. Date Filtering System (All Pages)
+
+Add a reusable date filter component and apply it to every data page:
+
+**New component: `src/components/DateFilter.tsx`**
+- A horizontal bar with preset buttons: Today, Yesterday, This Week, This Month, All Time
+- Optional date range picker using the existing Calendar component
+- Returns a `{ from: Date, to: Date }` range
+
+**Apply to these pages:**
+
+- **Lead Discovery (`LeadDiscovery.tsx`)**: Filter leads by `discovered_at` / `created_at`. Default view shows "Today"
+- **Campaigns (`Campaigns.tsx`)**: Filter by `created_at`. Default shows "Today"
+- **Conversations (`Conversations.tsx`)**: Filter by `created_at`. Default shows "This Week"
+- **Dashboard (`Dashboard.tsx`)**: Filter activities by date range
+- **Reports (`Reports.tsx`)**: Filter all data by date range (replace hardcoded 7-day window)
+
+---
+
+## 6. Sidebar Text Color Fix
+
+**Update `src/components/AppLayout.tsx`:**
+- Change nav item text from `text-sidebar-foreground` (gray) to `text-foreground` (black/white depending on theme)
+- Inactive items: `text-foreground` instead of `text-sidebar-foreground`
+- Active items remain highlighted with `bg-sidebar-accent text-sidebar-primary`
+- Sign Out button also updated to `text-foreground`
+
+---
+
+## 7. Settings Page Update
+
+**Update `src/pages/SettingsPage.tsx`:**
+- Add a "Social Media Channels" section where users can toggle Instagram and TikTok discovery on/off
+- Add fields for WhatsApp Business number (used in outreach templates)
+
+**Database:** Add `social_discovery_enabled` (boolean, default true) and `whatsapp_number` (text) to `settings` table.
+
+---
 
 ## Technical Details
 
-### New database migrations:
-```sql
--- Add analysis columns to leads
-ALTER TABLE leads ADD COLUMN IF NOT EXISTS priority_score integer DEFAULT 5;
-ALTER TABLE leads ADD COLUMN IF NOT EXISTS analysis jsonb DEFAULT NULL;
-ALTER TABLE leads ADD COLUMN IF NOT EXISTS unsubscribed boolean DEFAULT false;
+### Edge Function Changes Summary
 
--- Add portfolio projects to settings
-ALTER TABLE settings ADD COLUMN IF NOT EXISTS portfolio_projects jsonb DEFAULT '[]'::jsonb;
+| Function | Change |
+|---|---|
+| `auto-discover` | Add social media discovery pass (Instagram/TikTok via Firecrawl), call daily-outreach at end |
+| `social-discover` (new) | Dedicated social media search + extraction + analysis |
+| `daily-outreach` (new) | Pick hottest leads, determine best channel, generate messages, auto-send emails |
+| `config.toml` | Register `social-discover` and `daily-outreach` |
+
+### New Database Migration
+
+```text
+ALTER TABLE leads ADD COLUMN discovery_source text DEFAULT 'web';
+ALTER TABLE leads ADD COLUMN contact_channels jsonb DEFAULT '[]';
+ALTER TABLE email_campaigns ADD COLUMN channel text DEFAULT 'email';
+ALTER TABLE settings ADD COLUMN social_discovery_enabled boolean DEFAULT true;
+ALTER TABLE settings ADD COLUMN whatsapp_number text;
 ```
 
-### Files to create:
-1. `supabase/functions/analyze-lead/index.ts` - Analyst agent
+### New/Modified Frontend Files
 
-### Files to modify:
-1. `supabase/functions/auto-discover/index.ts` - Add inline analysis + portfolio matching before email generation
-2. `supabase/functions/generate-email/index.ts` - Use analysis data and portfolio matches in prompts
-3. `supabase/functions/auto-follow-up/index.ts` - Skip unsubscribed leads, add unsubscribe footer
-4. `supabase/functions/send-email/index.ts` - Add unsubscribe footer to all emails
-5. `src/pages/SettingsPage.tsx` - Add portfolio projects editor
-6. `src/pages/Dashboard.tsx` - Add "Hot Leads" section
-7. `src/pages/Reports.tsx` - Fix colors, add trends chart
-8. `src/pages/LeadDiscovery.tsx` - Show priority score and analysis data on lead cards
+| File | Change |
+|---|---|
+| `src/components/DateFilter.tsx` | New reusable date filter component |
+| `src/components/AppLayout.tsx` | Black sidebar text |
+| `src/pages/LeadDiscovery.tsx` | Add DateFilter, discovery source badges (web/instagram/tiktok), contact channel indicators |
+| `src/pages/Campaigns.tsx` | Add DateFilter, channel filter tabs, multi-channel icons |
+| `src/pages/Conversations.tsx` | Add DateFilter |
+| `src/pages/Dashboard.tsx` | Add DateFilter to activities |
+| `src/pages/Reports.tsx` | Add DateFilter for all metrics |
+| `src/pages/SettingsPage.tsx` | Social discovery toggles, WhatsApp number field |
 
-### Priority order:
-1. Portfolio data + better email personalization (biggest impact on conversion)
-2. Unsubscribe handling (compliance requirement)
-3. Priority scoring (better targeting)
-4. Analyst agent (deeper personalization)
-5. Enhanced reporting (operational visibility)
-6. Engagement agent (response handling - needs webhook setup)
+### Implementation Order
+
+1. Database migration (new columns)
+2. Sidebar color fix (quick win)
+3. DateFilter component + apply to all pages
+4. `social-discover` edge function
+5. `daily-outreach` edge function
+6. Update `auto-discover` to integrate social discovery + daily outreach
+7. Update Campaigns page for multi-channel
+8. Update Lead Discovery page with source badges and channel indicators
+9. Settings page social media toggles
+10. Deploy all edge functions and test end-to-end
 
