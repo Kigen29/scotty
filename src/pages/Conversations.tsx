@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { MessageSquare, ArrowUpRight, ArrowDownLeft, Sparkles } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
+import { DateFilter, type DateRange } from "@/components/DateFilter";
 
 const Conversations = () => {
   const { user } = useAuth();
   const [conversations, setConversations] = useState<(Tables<"conversations"> & { leads?: Tables<"leads"> })[]>([]);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   useEffect(() => {
     if (user) fetchConversations();
@@ -26,8 +27,16 @@ const Conversations = () => {
     if (data) setConversations(data as any);
   };
 
+  // Filter by date
+  const filtered = dateRange
+    ? conversations.filter((c) => {
+        const d = new Date(c.created_at);
+        return d >= dateRange.from && d <= dateRange.to;
+      })
+    : conversations;
+
   // Group conversations by lead
-  const grouped = conversations.reduce((acc, conv) => {
+  const grouped = filtered.reduce((acc, conv) => {
     const leadId = conv.lead_id;
     if (!acc[leadId]) acc[leadId] = { lead: (conv as any).leads, messages: [] };
     acc[leadId].messages.push(conv);
@@ -44,6 +53,8 @@ const Conversations = () => {
         <p className="text-muted-foreground mt-1">Track email threads with business owners</p>
       </div>
 
+      <DateFilter defaultPreset="this_week" onChange={setDateRange} />
+
       {leadIds.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -52,7 +63,6 @@ const Conversations = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Thread List */}
           <div className="space-y-2">
             {leadIds.map((leadId) => {
               const thread = grouped[leadId];
@@ -75,7 +85,6 @@ const Conversations = () => {
             })}
           </div>
 
-          {/* Message Thread */}
           <div className="lg:col-span-2">
             {activeThread ? (
               <Card>
@@ -89,11 +98,7 @@ const Conversations = () => {
                         msg.direction === "outbound" ? "bg-primary text-primary-foreground" : "bg-muted"
                       }`}>
                         <div className="flex items-center gap-1 mb-1">
-                          {msg.direction === "outbound" ? (
-                            <ArrowUpRight className="h-3 w-3" />
-                          ) : (
-                            <ArrowDownLeft className="h-3 w-3" />
-                          )}
+                          {msg.direction === "outbound" ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownLeft className="h-3 w-3" />}
                           <span className="text-xs opacity-75">
                             {msg.direction === "outbound" ? "You" : activeThread.lead?.business_name}
                           </span>

@@ -8,7 +8,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Globe, Phone, Mail, MapPin, CheckCircle2, X, Loader2, Filter, Star, Brain } from "lucide-react";
+import { Search, Globe, Phone, Mail, MapPin, CheckCircle2, X, Loader2, Filter, Star, Brain, Instagram, Linkedin, MessageCircle } from "lucide-react";
+import { DateFilter, type DateRange } from "@/components/DateFilter";
 
 const categories = ["restaurants", "salons", "hardware stores", "clinics", "retail shops", "schools", "hotels", "pharmacies"];
 const locations = ["Nairobi", "Mombasa", "Kisumu", "Nakuru", "Eldoret", "Thika", "Nyeri", "Malindi"];
@@ -21,6 +22,20 @@ const statusColors: Record<string, string> = {
   interested: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
   not_interested: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
   dismissed: "bg-secondary text-secondary-foreground",
+};
+
+const sourceIcons: Record<string, React.ReactNode> = {
+  web: <Globe className="h-3 w-3" />,
+  instagram: <Instagram className="h-3 w-3" />,
+  tiktok: <span className="text-[10px] font-bold">TT</span>,
+  linkedin: <Linkedin className="h-3 w-3" />,
+};
+
+const sourceColors: Record<string, string> = {
+  web: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  instagram: "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",
+  tiktok: "bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-300",
+  linkedin: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
 };
 
 type WebsiteFilter = "all" | "no_website" | "has_website";
@@ -46,6 +61,7 @@ const LeadDiscovery = () => {
   const [loading, setLoading] = useState(false);
   const [generatingEmail, setGeneratingEmail] = useState<string | null>(null);
   const [websiteFilter, setWebsiteFilter] = useState<WebsiteFilter>("all");
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   const generateEmail = async (leadId: string) => {
     setGeneratingEmail(leadId);
@@ -103,8 +119,12 @@ const LeadDiscovery = () => {
   };
 
   const filteredLeads = leads.filter((lead) => {
-    if (websiteFilter === "no_website") return !lead.has_website;
-    if (websiteFilter === "has_website") return lead.has_website;
+    if (websiteFilter === "no_website" && lead.has_website) return false;
+    if (websiteFilter === "has_website" && !lead.has_website) return false;
+    if (dateRange) {
+      const d = new Date(lead.discovered_at || lead.created_at);
+      if (d < dateRange.from || d > dateRange.to) return false;
+    }
     return true;
   });
 
@@ -117,6 +137,9 @@ const LeadDiscovery = () => {
         <h1 className="text-3xl font-bold text-foreground">Lead Discovery</h1>
         <p className="text-muted-foreground mt-1">Find Kenyan businesses that need your services</p>
       </div>
+
+      {/* Date Filter */}
+      <DateFilter defaultPreset="today" onChange={setDateRange} />
 
       {/* Search Controls */}
       <Card className="border border-border">
@@ -185,6 +208,8 @@ const LeadDiscovery = () => {
           {filteredLeads.map((lead) => {
             const analysis = lead.analysis as any;
             const priorityScore = lead.priority_score || 5;
+            const source = (lead as any).discovery_source || "web";
+            const contactChannels: any[] = (lead as any).contact_channels || [];
             return (
               <Card key={lead.id} className="relative border border-border">
                 <CardContent className="p-5">
@@ -195,6 +220,9 @@ const LeadDiscovery = () => {
                         {lead.category && <Badge variant="secondary" className="text-xs">{lead.category}</Badge>}
                         <Badge className={`text-xs border-0 ${statusColors[lead.status] || "bg-secondary text-secondary-foreground"}`}>
                           {lead.status.replace("_", " ")}
+                        </Badge>
+                        <Badge className={`text-xs border-0 gap-1 ${sourceColors[source] || sourceColors.web}`}>
+                          {sourceIcons[source]} {source}
                         </Badge>
                       </div>
                     </div>
@@ -231,6 +259,28 @@ const LeadDiscovery = () => {
                       </div>
                     )}
                   </div>
+
+                  {/* Contact channel indicators */}
+                  {contactChannels.length > 0 && (
+                    <div className="flex items-center gap-1.5 mt-2">
+                      {contactChannels.some((c: any) => c.type === "email") && (
+                        <Tooltip><TooltipTrigger><Mail className="h-3.5 w-3.5 text-blue-500" /></TooltipTrigger>
+                          <TooltipContent>Email available</TooltipContent></Tooltip>
+                      )}
+                      {contactChannels.some((c: any) => c.type === "whatsapp" || c.type === "phone") && (
+                        <Tooltip><TooltipTrigger><MessageCircle className="h-3.5 w-3.5 text-emerald-500" /></TooltipTrigger>
+                          <TooltipContent>WhatsApp/Phone available</TooltipContent></Tooltip>
+                      )}
+                      {contactChannels.some((c: any) => c.type === "instagram_dm") && (
+                        <Tooltip><TooltipTrigger><Instagram className="h-3.5 w-3.5 text-pink-500" /></TooltipTrigger>
+                          <TooltipContent>Instagram DM available</TooltipContent></Tooltip>
+                      )}
+                      {contactChannels.some((c: any) => c.type === "linkedin") && (
+                        <Tooltip><TooltipTrigger><Linkedin className="h-3.5 w-3.5 text-sky-500" /></TooltipTrigger>
+                          <TooltipContent>LinkedIn available</TooltipContent></Tooltip>
+                      )}
+                    </div>
+                  )}
 
                   {/* Analysis summary */}
                   {analysis?.summary && (
@@ -301,7 +351,7 @@ const LeadDiscovery = () => {
         <div className="text-center py-16 text-muted-foreground">
           <Filter className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p className="text-lg">No leads match this filter</p>
-          <p className="text-sm">Try changing the filter above</p>
+          <p className="text-sm">Try changing the date or filter above</p>
         </div>
       )}
     </div>

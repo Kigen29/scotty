@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Plus, X, Globe, Briefcase } from "lucide-react";
+import { Save, Plus, X, Globe, Briefcase, Instagram, MessageCircle } from "lucide-react";
 
 interface PortfolioProject {
   url: string;
@@ -35,6 +35,8 @@ const SettingsPage = () => {
     active_hours_start: "08:00",
     active_hours_end: "17:00",
     is_autonomous: true,
+    social_discovery_enabled: true,
+    whatsapp_number: "",
   });
   const [portfolioProjects, setPortfolioProjects] = useState<PortfolioProject[]>([]);
   const [newService, setNewService] = useState("");
@@ -68,6 +70,8 @@ const SettingsPage = () => {
         active_hours_start: data.active_hours_start || "08:00",
         active_hours_end: data.active_hours_end || "17:00",
         is_autonomous: data.is_autonomous ?? true,
+        social_discovery_enabled: (data as any).social_discovery_enabled ?? true,
+        whatsapp_number: (data as any).whatsapp_number || "",
       });
       setPortfolioProjects((data as any).portfolio_projects || []);
     }
@@ -145,7 +149,6 @@ const SettingsPage = () => {
             </div>
           </div>
 
-          {/* Services */}
           <div className="space-y-2">
             <Label>Services Offered</Label>
             <div className="flex gap-2">
@@ -161,7 +164,6 @@ const SettingsPage = () => {
             </div>
           </div>
 
-          {/* Portfolio Links */}
           <div className="space-y-2">
             <Label>Portfolio Links</Label>
             <div className="flex gap-2">
@@ -189,74 +191,69 @@ const SettingsPage = () => {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <Briefcase className="h-5 w-5" /> Portfolio Projects
-              </CardTitle>
+              <CardTitle className="flex items-center gap-2"><Briefcase className="h-5 w-5" /> Portfolio Projects</CardTitle>
               <CardDescription>Your completed projects — AI agents reference these when crafting personalized emails</CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={addPortfolioProject}>
-              <Plus className="h-4 w-4 mr-1" /> Add Project
-            </Button>
+            <Button variant="outline" size="sm" onClick={addPortfolioProject}><Plus className="h-4 w-4 mr-1" /> Add Project</Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {portfolioProjects.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No portfolio projects yet. Add your completed projects so the AI can reference them in outreach emails.
-            </p>
+            <p className="text-sm text-muted-foreground text-center py-4">No portfolio projects yet. Add your completed projects so the AI can reference them in outreach emails.</p>
           )}
           {portfolioProjects.map((project, i) => (
             <div key={i} className="relative p-4 rounded-lg border border-border space-y-3">
-              <button
-                onClick={() => removePortfolioProject(i)}
-                className="absolute top-2 right-2 p-1 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-              >
+              <button onClick={() => removePortfolioProject(i)} className="absolute top-2 right-2 p-1 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
                 <X className="h-4 w-4" />
               </button>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Project URL</Label>
-                  <Input
-                    value={project.url}
-                    onChange={(e) => updatePortfolioProject(i, "url", e.target.value)}
-                    placeholder="https://heartbeatsafaris.com"
-                  />
+                  <Input value={project.url} onChange={(e) => updatePortfolioProject(i, "url", e.target.value)} placeholder="https://heartbeatsafaris.com" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Industry</Label>
-                  <Input
-                    value={project.industry}
-                    onChange={(e) => updatePortfolioProject(i, "industry", e.target.value)}
-                    placeholder="Tourism & Travel"
-                  />
+                  <Input value={project.industry} onChange={(e) => updatePortfolioProject(i, "industry", e.target.value)} placeholder="Tourism & Travel" />
                 </div>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Key Features</Label>
-                <Input
-                  value={project.features}
-                  onChange={(e) => updatePortfolioProject(i, "features", e.target.value)}
-                  placeholder="Online booking, payment integration, mobile responsive"
-                />
+                <Input value={project.features} onChange={(e) => updatePortfolioProject(i, "features", e.target.value)} placeholder="Online booking, payment integration, mobile responsive" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Problem Solved</Label>
-                <Input
-                  value={project.problem_solved}
-                  onChange={(e) => updatePortfolioProject(i, "problem_solved", e.target.value)}
-                  placeholder="Enabled online bookings, increasing revenue by 40%"
-                />
+                <Input value={project.problem_solved} onChange={(e) => updatePortfolioProject(i, "problem_solved", e.target.value)} placeholder="Enabled online bookings, increasing revenue by 40%" />
               </div>
             </div>
           ))}
         </CardContent>
       </Card>
 
-      {/* Email Config */}
+      {/* Social Media Channels */}
       <Card>
         <CardHeader>
-          <CardTitle>Email Configuration</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Instagram className="h-5 w-5" /> Social Media Channels</CardTitle>
+          <CardDescription>Configure social media discovery and outreach channels</CardDescription>
         </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Social Media Discovery</Label>
+              <p className="text-sm text-muted-foreground">Search Instagram & TikTok for business leads</p>
+            </div>
+            <Switch checked={settings.social_discovery_enabled} onCheckedChange={(c) => setSettings((s) => ({ ...s, social_discovery_enabled: c }))} />
+          </div>
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2"><MessageCircle className="h-4 w-4" /> WhatsApp Business Number</Label>
+            <Input value={settings.whatsapp_number} onChange={(e) => setSettings((s) => ({ ...s, whatsapp_number: e.target.value }))} placeholder="+254 7XX XXX XXX" />
+            <p className="text-xs text-muted-foreground">Used in outreach templates when suggesting WhatsApp contact</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Email Config */}
+      <Card>
+        <CardHeader><CardTitle>Email Configuration</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -273,9 +270,7 @@ const SettingsPage = () => {
 
       {/* Automation */}
       <Card>
-        <CardHeader>
-          <CardTitle>Automation Rules</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Automation Rules</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -296,7 +291,6 @@ const SettingsPage = () => {
             </div>
           </div>
 
-          {/* Target categories */}
           <div className="space-y-2">
             <Label>Target Categories</Label>
             <div className="flex gap-2">
@@ -312,7 +306,6 @@ const SettingsPage = () => {
             </div>
           </div>
 
-          {/* Target locations */}
           <div className="space-y-2">
             <Label>Target Locations</Label>
             <div className="flex gap-2">

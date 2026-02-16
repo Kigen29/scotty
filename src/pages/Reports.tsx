@@ -6,12 +6,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Download, TrendingUp, TrendingDown, Mail, Users, MessageSquare, Flame, Star } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { DateFilter, type DateRange } from "@/components/DateFilter";
 
 const Reports = () => {
   const { user } = useAuth();
   const [leads, setLeads] = useState<any[]>([]);
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -28,25 +30,21 @@ const Reports = () => {
     fetchData();
   }, [user]);
 
-  const totalEmails = campaigns.length;
-  const sentEmails = campaigns.filter((c) => c.status !== "draft").length;
-  const repliedEmails = campaigns.filter((c) => c.status === "replied").length;
+  // Filter by date range
+  const filterByDate = (items: any[], dateField = "created_at") =>
+    dateRange ? items.filter((i) => { const d = new Date(i[dateField]); return d >= dateRange.from && d <= dateRange.to; }) : items;
+
+  const filteredLeads = filterByDate(leads);
+  const filteredCampaigns = filterByDate(campaigns);
+  const filteredActivities = filterByDate(activities);
+
+  const totalEmails = filteredCampaigns.length;
+  const sentEmails = filteredCampaigns.filter((c) => c.status !== "draft").length;
+  const repliedEmails = filteredCampaigns.filter((c) => c.status === "replied").length;
   const responseRate = sentEmails > 0 ? ((repliedEmails / sentEmails) * 100).toFixed(1) : "0";
 
-  // Week-over-week trends
-  const now = new Date();
-  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-
-  const thisWeekLeads = leads.filter((l) => new Date(l.created_at) >= oneWeekAgo).length;
-  const lastWeekLeads = leads.filter((l) => new Date(l.created_at) >= twoWeeksAgo && new Date(l.created_at) < oneWeekAgo).length;
-  const leadsTrend = lastWeekLeads > 0 ? Math.round(((thisWeekLeads - lastWeekLeads) / lastWeekLeads) * 100) : thisWeekLeads > 0 ? 100 : 0;
-
-  const thisWeekEmails = campaigns.filter((c) => c.sent_at && new Date(c.sent_at) >= oneWeekAgo).length;
-  const lastWeekEmails = campaigns.filter((c) => c.sent_at && new Date(c.sent_at) >= twoWeeksAgo && new Date(c.sent_at) < oneWeekAgo).length;
-  const emailsTrend = lastWeekEmails > 0 ? Math.round(((thisWeekEmails - lastWeekEmails) / lastWeekEmails) * 100) : thisWeekEmails > 0 ? 100 : 0;
-
   // Daily activity chart (last 7 days)
+  const now = new Date();
   const dailyData = Array.from({ length: 7 }).map((_, i) => {
     const date = new Date(now.getTime() - (6 - i) * 24 * 60 * 60 * 1000);
     const dayStr = date.toISOString().split("T")[0];
@@ -56,36 +54,31 @@ const Reports = () => {
     return { day: dayLabel, discovered, sent: emailsSent };
   });
 
-  // Hot leads
-  const hotLeads = leads
+  const hotLeads = filteredLeads
     .filter((l: any) => l.status === "interested" || (l.priority_score && l.priority_score >= 8))
     .sort((a: any, b: any) => (b.priority_score || 0) - (a.priority_score || 0))
     .slice(0, 5);
 
   const funnelStages = [
-    { label: "Discovered", count: leads.length, color: "hsl(var(--muted-foreground))" },
-    { label: "Contacted", count: leads.filter((l) => ["contacted", "responded", "interested", "not_interested", "converted"].includes(l.status)).length, color: "hsl(var(--primary))" },
-    { label: "Responded", count: leads.filter((l) => ["responded", "interested", "not_interested", "converted"].includes(l.status)).length, color: "hsl(220 80% 55%)" },
-    { label: "Interested", count: leads.filter((l) => ["interested", "converted"].includes(l.status)).length, color: "hsl(142 70% 45%)" },
-    { label: "Converted", count: leads.filter((l) => l.status === "converted").length, color: "hsl(45 90% 50%)" },
+    { label: "Discovered", count: filteredLeads.length, color: "hsl(var(--muted-foreground))" },
+    { label: "Contacted", count: filteredLeads.filter((l) => ["contacted", "responded", "interested", "not_interested", "converted"].includes(l.status)).length, color: "hsl(var(--primary))" },
+    { label: "Responded", count: filteredLeads.filter((l) => ["responded", "interested", "not_interested", "converted"].includes(l.status)).length, color: "hsl(220 80% 55%)" },
+    { label: "Interested", count: filteredLeads.filter((l) => ["interested", "converted"].includes(l.status)).length, color: "hsl(142 70% 45%)" },
+    { label: "Converted", count: filteredLeads.filter((l) => l.status === "converted").length, color: "hsl(45 90% 50%)" },
   ];
 
   const TrendIndicator = ({ value }: { value: number }) => {
     if (value === 0) return null;
     return value > 0 ? (
-      <span className="flex items-center gap-0.5 text-xs text-emerald-600 dark:text-emerald-400">
-        <TrendingUp className="h-3 w-3" /> +{value}%
-      </span>
+      <span className="flex items-center gap-0.5 text-xs text-emerald-600 dark:text-emerald-400"><TrendingUp className="h-3 w-3" /> +{value}%</span>
     ) : (
-      <span className="flex items-center gap-0.5 text-xs text-red-500">
-        <TrendingDown className="h-3 w-3" /> {value}%
-      </span>
+      <span className="flex items-center gap-0.5 text-xs text-red-500"><TrendingDown className="h-3 w-3" /> {value}%</span>
     );
   };
 
   const exportCSV = () => {
     const headers = ["Business Name", "Category", "Location", "Email", "Phone", "Status", "Priority", "Discovered At"];
-    const rows = leads.map((l: any) => [l.business_name, l.category, l.location, l.email, l.phone, l.status, l.priority_score || 5, l.discovered_at]);
+    const rows = filteredLeads.map((l: any) => [l.business_name, l.category, l.location, l.email, l.phone, l.status, l.priority_score || 5, l.discovered_at]);
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -107,20 +100,20 @@ const Reports = () => {
         </Button>
       </div>
 
-      {/* Metrics with trends */}
+      <DateFilter defaultPreset="this_week" onChange={setDateRange} />
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
-          { label: "Total Emails", value: totalEmails, icon: Mail, trend: emailsTrend },
-          { label: "Sent", value: sentEmails, icon: TrendingUp, trend: emailsTrend },
+          { label: "Total Emails", value: totalEmails, icon: Mail, trend: 0 },
+          { label: "Sent", value: sentEmails, icon: TrendingUp, trend: 0 },
           { label: "Response Rate", value: `${responseRate}%`, icon: MessageSquare, trend: 0 },
-          { label: "Total Leads", value: leads.length, icon: Users, trend: leadsTrend },
+          { label: "Total Leads", value: filteredLeads.length, icon: Users, trend: 0 },
         ].map((m) => (
           <Card key={m.label}>
             <CardContent className="p-6 flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">{m.label}</p>
                 <p className="text-2xl font-bold mt-1">{m.value}</p>
-                <TrendIndicator value={m.trend} />
               </div>
               <m.icon className="h-6 w-6 text-muted-foreground" />
             </CardContent>
@@ -128,21 +121,15 @@ const Reports = () => {
         ))}
       </div>
 
-      {/* Daily Activity Chart */}
       <Card>
-        <CardHeader>
-          <CardTitle>Daily Activity (Last 7 Days)</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Daily Activity (Last 7 Days)</CardTitle></CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={dailyData}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis dataKey="day" className="text-xs fill-muted-foreground" />
               <YAxis className="text-xs fill-muted-foreground" />
-              <RechartsTooltip
-                contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
-                labelStyle={{ color: "hsl(var(--foreground))" }}
-              />
+              <RechartsTooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} labelStyle={{ color: "hsl(var(--foreground))" }} />
               <Bar dataKey="discovered" name="Discovered" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
               <Bar dataKey="sent" name="Emails Sent" fill="hsl(220 80% 55%)" radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -150,14 +137,9 @@ const Reports = () => {
         </CardContent>
       </Card>
 
-      {/* Hot Leads */}
       {hotLeads.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Flame className="h-5 w-5 text-orange-500" /> Hot Leads
-            </CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Flame className="h-5 w-5 text-orange-500" /> Hot Leads</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-2">
               {hotLeads.map((lead: any) => (
@@ -180,11 +162,8 @@ const Reports = () => {
         </Card>
       )}
 
-      {/* Funnel */}
       <Card>
-        <CardHeader>
-          <CardTitle>Lead Funnel</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Lead Funnel</CardTitle></CardHeader>
         <CardContent>
           <div className="space-y-3">
             {funnelStages.map((stage) => {
@@ -194,10 +173,7 @@ const Reports = () => {
                 <div key={stage.label} className="flex items-center gap-4">
                   <span className="text-sm w-24 text-muted-foreground">{stage.label}</span>
                   <div className="flex-1 h-8 bg-muted rounded-lg overflow-hidden">
-                    <div
-                      className="h-full rounded-lg flex items-center px-3 transition-all"
-                      style={{ width: `${width}%`, backgroundColor: stage.color }}
-                    >
+                    <div className="h-full rounded-lg flex items-center px-3 transition-all" style={{ width: `${width}%`, backgroundColor: stage.color }}>
                       <span className="text-xs font-medium text-white">{stage.count}</span>
                     </div>
                   </div>
@@ -208,15 +184,12 @@ const Reports = () => {
         </CardContent>
       </Card>
 
-      {/* Category Breakdown */}
       <Card>
-        <CardHeader>
-          <CardTitle>Leads by Category</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Leads by Category</CardTitle></CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {Object.entries(
-              leads.reduce((acc, l) => {
+              filteredLeads.reduce((acc, l) => {
                 const cat = l.category || "Uncategorized";
                 acc[cat] = (acc[cat] || 0) + 1;
                 return acc;
@@ -228,9 +201,7 @@ const Reports = () => {
               </div>
             ))}
           </div>
-          {leads.length === 0 && (
-            <p className="text-center text-muted-foreground text-sm py-8">No data yet</p>
-          )}
+          {filteredLeads.length === 0 && <p className="text-center text-muted-foreground text-sm py-8">No data yet</p>}
         </CardContent>
       </Card>
     </div>

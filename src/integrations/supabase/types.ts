@@ -79,6 +79,7 @@ export type Database = {
       email_campaigns: {
         Row: {
           body: string
+          channel: string | null
           created_at: string
           id: string
           lead_id: string
@@ -93,6 +94,7 @@ export type Database = {
         }
         Insert: {
           body: string
+          channel?: string | null
           created_at?: string
           id?: string
           lead_id: string
@@ -107,6 +109,7 @@ export type Database = {
         }
         Update: {
           body?: string
+          channel?: string | null
           created_at?: string
           id?: string
           lead_id?: string
@@ -134,8 +137,10 @@ export type Database = {
           analysis: Json | null
           business_name: string
           category: string | null
+          contact_channels: Json | null
           created_at: string
           discovered_at: string
+          discovery_source: string | null
           email: string | null
           has_website: boolean | null
           id: string
@@ -154,8 +159,10 @@ export type Database = {
           analysis?: Json | null
           business_name: string
           category?: string | null
+          contact_channels?: Json | null
           created_at?: string
           discovered_at?: string
+          discovery_source?: string | null
           email?: string | null
           has_website?: boolean | null
           id?: string
@@ -174,8 +181,10 @@ export type Database = {
           analysis?: Json | null
           business_name?: string
           category?: string | null
+          contact_channels?: Json | null
           created_at?: string
           discovered_at?: string
+          discovery_source?: string | null
           email?: string | null
           has_website?: boolean | null
           id?: string
@@ -208,10 +217,12 @@ export type Database = {
           portfolio_projects: Json | null
           sender_email: string | null
           services: string[] | null
+          social_discovery_enabled: boolean | null
           target_categories: string[] | null
           target_locations: string[] | null
           updated_at: string
           user_id: string
+          whatsapp_number: string | null
         }
         Insert: {
           active_hours_end?: string | null
@@ -228,10 +239,12 @@ export type Database = {
           portfolio_projects?: Json | null
           sender_email?: string | null
           services?: string[] | null
+          social_discovery_enabled?: boolean | null
           target_categories?: string[] | null
           target_locations?: string[] | null
           updated_at?: string
           user_id: string
+          whatsapp_number?: string | null
         }
         Update: {
           active_hours_end?: string | null
@@ -248,10 +261,12 @@ export type Database = {
           portfolio_projects?: Json | null
           sender_email?: string | null
           services?: string[] | null
+          social_discovery_enabled?: boolean | null
           target_categories?: string[] | null
           target_locations?: string[] | null
           updated_at?: string
           user_id?: string
+          whatsapp_number?: string | null
         }
         Relationships: []
       }
