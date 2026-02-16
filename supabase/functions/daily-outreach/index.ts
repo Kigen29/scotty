@@ -1,0 +1,254 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+    const { data: allSettings } = await supabase
+      .from("settings")
+      .select("*")
+      .eq("is_autonomous", true);
+
+    if (!allSettings || allSettings.length === 0) {
+      return new Response(JSON.stringify({ message: "No autonomous users" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    let totalOutreach = 0;
+
+    for (const userSettings of allSettings) {
+      const dailyLimit = userSettings.daily_send_limit || 20;
+      const senderName = userSettings.company_name || "Emmanuel Kigen";
+      const senderEmail = userSettings.sender_email || "";
+      const services = userSettings.services?.join(", ") || "web development and digital solutions";
+      const signature = userSettings.email_signature || "Best regards,\nEmmanuel Kigen";
+      const portfolio = userSettings.portfolio_links?.join(", ") || "";
+      const portfolioProjects = (userSettings as any).portfolio_projects || [];
+
+      // Get today's leads that haven't been contacted yet, sorted by priority
+      const { data: hotLeads } = await supabase
+        .from("leads")
+        .select("*")
+        .eq("user_id", userSettings.user_id)
+        .in("status", ["qualified", "discovered"])
+        .eq("unsubscribed", false)
+        .order("priority_score", { ascending: false })
+        .limit(dailyLimit);
+
+      if (!hotLeads || hotLeads.length === 0) continue;
+
+      // Check how many emails already sent today
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const { count: sentToday } = await supabase
+        .from("email_campaigns")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userSettings.user_id)
+        .gte("created_at", todayStart.toISOString());
+
+      const remaining = dailyLimit - (sentToday || 0);
+      if (remaining <= 0) continue;
+
+      const leadsToProcess = hotLeads.slice(0, remaining);
+
+      for (const lead of leadsToProcess) {
+        // Check if already has a campaign
+        const { data: existingCampaign } = await supabase
+          .from("email_campaigns")
+          .select("id")
+          .eq("lead_id", lead.id)
+          .eq("user_id", userSettings.user_id)
+          .maybeSingle();
+        if (existingCampaign) continue;
+
+        // Determine best contact channel
+        const contactChannels = (lead as any).contact_channels || [];
+        let channel = "email";
+        let contactValue = lead.email || "";
+
+        if (!lead.email) {
+          // Try other channels
+          const whatsapp = contactChannels.find((c: any) => c.type === "whatsapp");
+          const igDm = contactChannels.find((c: any) => c.type === "instagram_dm");
+          const linkedin = contactChannels.find((c: any) => c.type === "linkedin");
+
+          if (lead.phone) {
+            channel = "whatsapp";
+            contactValue = whatsapp?.value || lead.phone;
+          } else if (igDm) {
+            channel = "instagram_dm";
+            contactValue = igDm.handle || "";
+          } else if (linkedin) {
+            channel = "linkedin";
+            contactValue = linkedin.url || "";
+          } else {
+            continue; // No contact method available
+          }
+        }
+
+        // Build analysis context
+        const analysis = (lead as any).analysis;
+        const painPointsText = analysis?.pain_points?.length
+          ? `\nPain points: ${analysis.pain_points.join("; ")}`
+          : "";
+        const solutionsText = analysis?.recommended_solutions?.length
+          ? `\nSolutions: ${analysis.recommended_solutions.join("; ")}`
+          : "";
+
+        // Generate message based on channel
+        const channelPrompts: Record<string, string> = {
+          email: `Write a compelling personal cold email from ${senderName} to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+- They ${lead.has_website ? "have a basic website" : "don't have a website"}
+- Services offered: ${services}${painPointsText}${solutionsText}
+${portfolio ? `- Portfolio: ${portfolio}` : ""}
+- End with soft CTA (call or WhatsApp chat)
+- Sign off as ${senderName}
+${signature ? `- Signature: ${signature}` : ""}
+- Include "Reply STOP to unsubscribe" at the bottom`,
+
+          whatsapp: `Write a short, friendly WhatsApp message from ${senderName} to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+- Keep it under 150 words, conversational
+- They ${lead.has_website ? "have a basic website" : "don't have a website"}
+- You offer: ${services}${painPointsText}
+- Be casual but professional — WhatsApp style
+- End with a question to start conversation`,
+
+          instagram_dm: `Write a short Instagram DM from ${senderName} to @${contactValue} (${lead.business_name}, ${lead.category || "business"} in ${lead.location || "Kenya"}).
+- Max 100 words, casual and genuine
+- Compliment their content/business first
+- Mention how you could help with their online presence${painPointsText}
+- End with a friendly question`,
+
+          linkedin: `Write a LinkedIn connection message from ${senderName} to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+- Max 300 characters (LinkedIn limit)
+- Professional but warm
+- Mention a specific way you could help${painPointsText}`,
+        };
+
+        try {
+          const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-3-flash-preview",
+              messages: [
+                { role: "system", content: `You are writing ${channel} messages on behalf of a freelance web developer doing outreach to East African businesses.` },
+                { role: "user", content: channelPrompts[channel] || channelPrompts.email },
+              ],
+              tools: [{
+                type: "function",
+                function: {
+                  name: "compose_message",
+                  description: "Compose the outreach message",
+                  parameters: {
+                    type: "object",
+                    properties: {
+                      subject: { type: "string", description: "Subject line (for email) or empty for other channels" },
+                      body: { type: "string", description: "Message body" },
+                    },
+                    required: ["subject", "body"],
+                    additionalProperties: false,
+                  },
+                },
+              }],
+              tool_choice: { type: "function", function: { name: "compose_message" } },
+            }),
+          });
+
+          if (!aiResponse.ok) continue;
+
+          const aiData = await aiResponse.json();
+          const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+          if (!toolCall?.function?.arguments) continue;
+
+          const message = JSON.parse(toolCall.function.arguments);
+
+          // Save campaign
+          const { data: campaign } = await supabase.from("email_campaigns").insert({
+            user_id: userSettings.user_id,
+            lead_id: lead.id,
+            subject: message.subject || `${channel} outreach to ${lead.business_name}`,
+            body: message.body,
+            template_type: "first_touch",
+            status: "draft",
+            channel,
+          }).select("id").single();
+
+          if (!campaign) continue;
+
+          // Auto-send emails via Resend
+          if (channel === "email" && lead.email && RESEND_API_KEY && senderEmail) {
+            try {
+              const sendResponse = await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${RESEND_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  from: `${senderName} <${senderEmail}>`,
+                  to: [lead.email],
+                  subject: message.subject,
+                  text: message.body,
+                }),
+              });
+
+              if (sendResponse.ok) {
+                await supabase.from("email_campaigns").update({
+                  status: "sent",
+                  sent_at: new Date().toISOString(),
+                }).eq("id", campaign.id);
+
+                await supabase.from("leads").update({ status: "contacted" }).eq("id", lead.id);
+
+                await supabase.from("activity_logs").insert({
+                  user_id: userSettings.user_id,
+                  action: "auto_email_sent",
+                  details: { business_name: lead.business_name, to: lead.email, channel },
+                });
+              }
+            } catch (sendErr) {
+              console.error(`Send failed for ${lead.business_name}:`, sendErr);
+            }
+          }
+
+          totalOutreach++;
+        } catch (err) {
+          console.error(`Outreach failed for ${lead.business_name}:`, err);
+        }
+      }
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, total_outreach: totalOutreach }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("daily-outreach error:", error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Users, Mail, MessageSquare, TrendingUp, Eye, XCircle, CheckCircle2, Search, Send, Zap, RefreshCw, Flame, Star } from "lucide-react";
+import { DateFilter, type DateRange } from "@/components/DateFilter";
 
 const activityLabels: Record<string, { label: string; icon: React.ReactNode }> = {
   leads_discovered: { label: "Discovered leads", icon: <Search className="h-3.5 w-3.5" /> },
@@ -37,18 +38,11 @@ const formatDetails = (action: string, details: any): string => {
 const Dashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState({
-    totalLeads: 0,
-    qualified: 0,
-    contacted: 0,
-    responded: 0,
-    interested: 0,
-    notInterested: 0,
-    emailsSent: 0,
-    drafts: 0,
-    responseRate: 0,
+    totalLeads: 0, qualified: 0, contacted: 0, responded: 0, interested: 0, notInterested: 0, emailsSent: 0, drafts: 0, responseRate: 0,
   });
   const [activities, setActivities] = useState<any[]>([]);
   const [hotLeads, setHotLeads] = useState<any[]>([]);
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -67,16 +61,13 @@ const Dashboard = () => {
         setStats({
           totalLeads: leads.length,
           qualified: leads.filter((l) => l.status === "qualified").length,
-          contacted,
-          responded,
-          interested,
+          contacted, responded, interested,
           notInterested: leads.filter((l) => l.status === "not_interested").length,
           emailsSent: emails?.filter((e) => e.status === "sent").length || 0,
           drafts: emails?.filter((e) => e.status === "draft").length || 0,
           responseRate: contacted > 0 ? Math.round((responded / contacted) * 100) : 0,
         });
 
-        // Hot leads: interested OR high priority score
         const hot = leads
           .filter((l: any) => l.status === "interested" || (l.priority_score && l.priority_score >= 8))
           .sort((a: any, b: any) => (b.priority_score || 0) - (a.priority_score || 0))
@@ -89,6 +80,14 @@ const Dashboard = () => {
 
     fetchStats();
   }, [user]);
+
+  // Filter activities by date
+  const filteredActivities = dateRange
+    ? activities.filter((a) => {
+        const d = new Date(a.created_at);
+        return d >= dateRange.from && d <= dateRange.to;
+      })
+    : activities;
 
   const metricCards = [
     { label: "Total Leads", value: stats.totalLeads, icon: Users, color: "text-primary" },
@@ -122,9 +121,7 @@ const Dashboard = () => {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Pipeline Overview</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Pipeline Overview</CardTitle></CardHeader>
         <CardContent>
           <div className="flex items-center gap-4 flex-wrap">
             {[
@@ -148,7 +145,6 @@ const Dashboard = () => {
         </CardContent>
       </Card>
 
-      {/* Hot Leads */}
       {hotLeads.length > 0 && (
         <Card>
           <CardHeader>
@@ -187,13 +183,12 @@ const Dashboard = () => {
           <CardTitle>Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
-          {activities.length === 0 ? (
-            <p className="text-muted-foreground text-sm py-8 text-center">
-              No activity yet. Start by discovering leads!
-            </p>
+          <DateFilter defaultPreset="all" onChange={setDateRange} />
+          {filteredActivities.length === 0 ? (
+            <p className="text-muted-foreground text-sm py-8 text-center">No activity yet. Start by discovering leads!</p>
           ) : (
-            <div className="space-y-2">
-              {activities.map((activity) => {
+            <div className="space-y-2 mt-4">
+              {filteredActivities.map((activity) => {
                 const info = activityLabels[activity.action] || { label: activity.action, icon: null };
                 return (
                   <div key={activity.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">

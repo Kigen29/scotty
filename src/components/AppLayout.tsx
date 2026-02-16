@@ -55,7 +55,7 @@ const AppLayout = () => {
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                   isActive
                     ? "bg-sidebar-accent text-sidebar-primary"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    : "text-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 )
               }
             >
@@ -68,7 +68,7 @@ const AppLayout = () => {
         <div className="p-3 border-t border-sidebar-border">
           <button
             onClick={handleSignOut}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors w-full"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors w-full"
           >
             <LogOut className="h-4 w-4" />
             Sign Out

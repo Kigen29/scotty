@@ -364,6 +364,38 @@ ${signature ? `- Use this signature: ${signature}` : ""}`;
       });
     }
 
+    // --- Chain: Social Media Discovery ---
+    try {
+      const socialUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/social-discover`;
+      await fetch(socialUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        },
+        body: JSON.stringify({}),
+      });
+      console.log("Social discovery triggered");
+    } catch (e) {
+      console.error("Failed to trigger social-discover:", e);
+    }
+
+    // --- Chain: Daily Outreach ---
+    try {
+      const outreachUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/daily-outreach`;
+      await fetch(outreachUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        },
+        body: JSON.stringify({}),
+      });
+      console.log("Daily outreach triggered");
+    } catch (e) {
+      console.error("Failed to trigger daily-outreach:", e);
+    }
+
     return new Response(
       JSON.stringify({ success: true, total_discovered: totalDiscovered }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

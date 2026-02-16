@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.classify-response]
 verify_jwt = false
+
+[functions.social-discover]
+verify_jwt = false
+
+[functions.daily-outreach]
+verify_jwt = false
