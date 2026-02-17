@@ -1,156 +1,122 @@
 
+## Refocusing Discovery Agents: Google Business Profile Leads with No Website
 
-# ScoutAgent: Multi-Channel Autonomous Pipeline Upgrade
+### The Problem with the Current Approach
 
-## Overview
-This plan adds social media discovery, multi-channel outreach intelligence, smarter autonomous lead selection, date-based filtering across all pages, and a sidebar styling fix.
+Right now the agents search for businesses using general web queries and social media, then filter by `has_website`. The issue is:
 
----
+- The search queries return a mix of results — some businesses already have professional websites, some are on directories, some are on social media
+- The AI is doing "post-filter" filtering (find everything, then check if they have a website)
+- This wastes API calls on businesses that are already served
+- The social-discover agent finds Instagram/TikTok pages, but many of those businesses also have websites
 
-## 1. Database Changes
+### The New Approach: Google Business Profile (GBP) as the Source of Truth
 
-Add new columns to support social media discovery and multi-channel contact methods:
-
-**`leads` table updates:**
-- `discovery_source` (text, default `'web'`) -- tracks where the lead was found: `web`, `instagram`, `tiktok`, `linkedin`
-- `contact_channels` (jsonb, default `'[]'`) -- structured list of available contact methods, e.g. `[{"type": "email", "value": "..."}, {"type": "whatsapp", "value": "..."}, {"type": "instagram_dm", "handle": "..."}, {"type": "linkedin", "url": "..."}]`
-- `social_links` column already exists but is underutilized -- we will populate it with Instagram/TikTok/LinkedIn URLs
-
-**`email_campaigns` table updates:**
-- `channel` (text, default `'email'`) -- the outreach channel used: `email`, `whatsapp`, `instagram_dm`, `linkedin`
-- This lets the Campaigns page show all outreach types, not just email
+Google Business Profiles are the ideal data source because:
+- A business with a GBP but no website is **explicitly** signaling they have no web presence
+- Google even marks these profiles with "No website" in Maps results
+- GBP listings contain phone numbers, addresses, categories, and sometimes emails — ready to use
+- This is where most small Kenyan businesses actually live (Google Maps / local search)
 
 ---
 
-## 2. Social Media Discovery Agent
+## What Changes
 
-**New edge function: `supabase/functions/social-discover/index.ts`**
+### 1. `auto-discover` — Complete Search Strategy Overhaul
 
-Uses Firecrawl search to find Kenyan businesses on Instagram and TikTok:
-- Search queries like `"site:instagram.com ${category} ${location} Kenya"` and `"site:tiktok.com ${category} ${location} Kenya business"`
-- AI extracts business name, handle, bio info, any contact details (email in bio, phone, WhatsApp link)
-- Inserts leads with `discovery_source: 'instagram'` or `'tiktok'` and populates `social_links` and `contact_channels`
-- Runs inline analysis (same as current auto-discover) to score and enrich each lead
-- Registered in `config.toml` with `verify_jwt = false`
+**New search queries** specifically targeting Google Business Profiles with no website:
 
-**Update `supabase/functions/auto-discover/index.ts`:**
-- After the existing web discovery loop, add a second pass that calls the social media search logic (Instagram + TikTok)
-- Alternates between web and social sources on each cron run to avoid redundancy
+- `"${category} ${location} Kenya" site:maps.google.com`
+- `"${category} ${location} Kenya" -site:*.co.ke -site:*.com "Google Maps"`
+- `"${category} near ${location}" Kenya "no website" OR "visit us at" OR "call us"`
+- Firecrawl's country filter `ke` ensures Kenyan results
 
----
+**New AI extraction prompt** — strictly enforces the no-website rule:
+- `has_website: true` → **skip entirely, do not insert**
+- Only accept leads where the business is ONLY found on Google Maps, directories, or social profiles
+- Extract: business name, phone, email, Google Maps URL, category, location, address
+- The `google_maps_url` is stored in `social_links.google_maps` so you can verify the lead
 
-## 3. Smart Daily Outreach Agent
+**Hard filter in code**: After AI extraction, add a code-level check — if `has_website === true`, skip that business regardless of what the AI says. This double-ensures no website-having businesses slip through.
 
-**New edge function: `supabase/functions/daily-outreach/index.ts`**
-
-This runs daily (or can be called by auto-follow-up) and:
-1. Queries all leads with status `qualified` or `discovered` that were found today or have no outreach yet
-2. Sorts by `priority_score` descending, picks the top N leads (based on `daily_send_limit`)
-3. For each lead, determines the best contact channel:
-   - If `email` exists: generate and queue an email (existing flow)
-   - If no email but `phone` exists: generate a WhatsApp message template and store as a campaign with `channel: 'whatsapp'` (user sends manually or via WhatsApp Business API later)
-   - If no email/phone but has Instagram handle: generate an Instagram DM draft with `channel: 'instagram_dm'`
-   - If LinkedIn profile exists: generate a LinkedIn connection message with `channel: 'linkedin'`
-4. Auto-sends email campaigns via Resend (existing flow)
-5. Non-email channels are saved as `draft` for the user to copy-paste or send manually (with clear instructions in the UI)
-
-**Update `auto-discover` to call `daily-outreach` logic at the end** so the full pipeline is: Discover -> Analyze -> Pick Hottest -> Draft Messages -> Send Emails.
+**New `discovery_source` value**: `'google_maps'` for web-discovered leads found via Google Business Profiles (more accurate than just `'web'`).
 
 ---
 
-## 4. Multi-Channel UI in Campaigns Page
+### 2. `social-discover` — Also Filtered to No-Website Businesses
 
-Update `src/pages/Campaigns.tsx`:
-- Add channel icons (Mail, Phone, Instagram icon, LinkedIn icon) next to each campaign
-- Filter tabs: All | Email | WhatsApp | Instagram DM | LinkedIn
-- For non-email drafts, show a "Copy Message" button instead of "Send" since those channels require manual sending
-- Show the contact handle/number the message is addressed to
-
----
-
-## 5. Date Filtering System (All Pages)
-
-Add a reusable date filter component and apply it to every data page:
-
-**New component: `src/components/DateFilter.tsx`**
-- A horizontal bar with preset buttons: Today, Yesterday, This Week, This Month, All Time
-- Optional date range picker using the existing Calendar component
-- Returns a `{ from: Date, to: Date }` range
-
-**Apply to these pages:**
-
-- **Lead Discovery (`LeadDiscovery.tsx`)**: Filter leads by `discovered_at` / `created_at`. Default view shows "Today"
-- **Campaigns (`Campaigns.tsx`)**: Filter by `created_at`. Default shows "Today"
-- **Conversations (`Conversations.tsx`)**: Filter by `created_at`. Default shows "This Week"
-- **Dashboard (`Dashboard.tsx`)**: Filter activities by date range
-- **Reports (`Reports.tsx`)**: Filter all data by date range (replace hardcoded 7-day window)
+The social discover agent currently searches Instagram/TikTok broadly. It will be updated so that:
+- The AI extraction prompt explicitly says: **only extract businesses that have NO separate website** — if a business has `website_url` in their bio, skip them
+- The `has_website` field is enforced — businesses with websites are dropped at the code level too
+- Social media platforms (Instagram, TikTok) are themselves treated as indicators of no-website status — a business whose entire digital presence is an Instagram page is a perfect lead
 
 ---
 
-## 6. Sidebar Text Color Fix
+### 3. What Stays the Same
 
-**Update `src/components/AppLayout.tsx`:**
-- Change nav item text from `text-sidebar-foreground` (gray) to `text-foreground` (black/white depending on theme)
-- Inactive items: `text-foreground` instead of `text-sidebar-foreground`
-- Active items remain highlighted with `bg-sidebar-accent text-sidebar-primary`
-- Sign Out button also updated to `text-foreground`
+- `daily-outreach` — no changes needed. It already picks the hottest leads and contacts them via the best available channel (Email → WhatsApp → Instagram DM → LinkedIn)
+- `auto-discover` still chains to `social-discover` → `daily-outreach` at the end
+- Database schema — no new columns needed, just better data going in
 
 ---
 
-## 7. Settings Page Update
+## Files to Change
 
-**Update `src/pages/SettingsPage.tsx`:**
-- Add a "Social Media Channels" section where users can toggle Instagram and TikTok discovery on/off
-- Add fields for WhatsApp Business number (used in outreach templates)
-
-**Database:** Add `social_discovery_enabled` (boolean, default true) and `whatsapp_number` (text) to `settings` table.
+| File | What Changes |
+|---|---|
+| `supabase/functions/auto-discover/index.ts` | New GBP-focused search queries, stricter AI extraction prompt, code-level `has_website` filter, `discovery_source: 'google_maps'` |
+| `supabase/functions/social-discover/index.ts` | Stricter AI prompt (no-website only), code-level `has_website` filter on social leads too |
 
 ---
 
 ## Technical Details
 
-### Edge Function Changes Summary
+### New Search Queries in `auto-discover`
 
-| Function | Change |
-|---|---|
-| `auto-discover` | Add social media discovery pass (Instagram/TikTok via Firecrawl), call daily-outreach at end |
-| `social-discover` (new) | Dedicated social media search + extraction + analysis |
-| `daily-outreach` (new) | Pick hottest leads, determine best channel, generate messages, auto-send emails |
-| `config.toml` | Register `social-discover` and `daily-outreach` |
-
-### New Database Migration
+Instead of one generic query, the agent will rotate through 3 targeted query patterns per run:
 
 ```text
-ALTER TABLE leads ADD COLUMN discovery_source text DEFAULT 'web';
-ALTER TABLE leads ADD COLUMN contact_channels jsonb DEFAULT '[]';
-ALTER TABLE email_campaigns ADD COLUMN channel text DEFAULT 'email';
-ALTER TABLE settings ADD COLUMN social_discovery_enabled boolean DEFAULT true;
-ALTER TABLE settings ADD COLUMN whatsapp_number text;
+Query 1: "${category} ${location} Kenya" "Google Maps" "No website"
+Query 2: "${category} ${location} Kenya small business" -inurl:.co.ke -inurl:.com/
+Query 3: "${category} near ${location}" Kenya phone contact
 ```
 
-### New/Modified Frontend Files
+These target businesses that only appear in Google Maps/directory results, not those with their own domains.
 
-| File | Change |
-|---|---|
-| `src/components/DateFilter.tsx` | New reusable date filter component |
-| `src/components/AppLayout.tsx` | Black sidebar text |
-| `src/pages/LeadDiscovery.tsx` | Add DateFilter, discovery source badges (web/instagram/tiktok), contact channel indicators |
-| `src/pages/Campaigns.tsx` | Add DateFilter, channel filter tabs, multi-channel icons |
-| `src/pages/Conversations.tsx` | Add DateFilter |
-| `src/pages/Dashboard.tsx` | Add DateFilter to activities |
-| `src/pages/Reports.tsx` | Add DateFilter for all metrics |
-| `src/pages/SettingsPage.tsx` | Social discovery toggles, WhatsApp number field |
+### New AI Prompt Rules (auto-discover)
 
-### Implementation Order
+```text
+STRICT RULES - NO EXCEPTIONS:
+1. ONLY extract businesses with NO website of their own
+2. If a result shows a business domain (e.g. "businessname.co.ke", "businessname.com"), 
+   set has_website: true — these will be SKIPPED
+3. Acceptable sources: Google Maps listing, Yellow Pages, Yelp, Facebook page only
+4. Extract phone numbers aggressively — this is our primary contact method
+5. Extract any email addresses visible in the listing
+6. Store the Google Maps URL as the source reference
+```
 
-1. Database migration (new columns)
-2. Sidebar color fix (quick win)
-3. DateFilter component + apply to all pages
-4. `social-discover` edge function
-5. `daily-outreach` edge function
-6. Update `auto-discover` to integrate social discovery + daily outreach
-7. Update Campaigns page for multi-channel
-8. Update Lead Discovery page with source badges and channel indicators
-9. Settings page social media toggles
-10. Deploy all edge functions and test end-to-end
+### Code-Level Hard Filter
 
+```typescript
+// After AI extraction — hard filter, no exceptions
+const noWebsiteBusinesses = businesses.filter(b => !b.has_website);
+// Only insert noWebsiteBusinesses
+```
+
+### New Lead Fields Populated
+
+- `discovery_source`: `'google_maps'` (web agent) or `'instagram'`/`'tiktok'` (social agent)
+- `social_links.google_maps`: the Maps URL for verification
+- `phone`: extracted from GBP listing (primary contact method)
+- `notes`: address and any other GBP details
+
+---
+
+## Result
+
+After this change, every lead that enters the system will be a business that:
+1. Has a Google presence (real, findable business)
+2. Has NO website of their own
+3. Has at least one contact method (phone number from GBP, or email, or social handle)
+4. Is ready for the daily-outreach agent to contact them about getting a website built
