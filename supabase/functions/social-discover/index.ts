@@ -23,7 +23,6 @@ Deno.serve(async (req) => {
       throw new Error("Missing required API keys");
     }
 
-    // Can be called with specific params or as cron (processes all autonomous users)
     let usersToProcess: any[] = [];
     try {
       const body = await req.json();
@@ -32,7 +31,7 @@ Deno.serve(async (req) => {
         if (data) usersToProcess = [data];
       }
     } catch {
-      // No body — cron mode, get all autonomous users
+      // No body — cron mode
     }
 
     if (usersToProcess.length === 0) {
@@ -46,7 +45,6 @@ Deno.serve(async (req) => {
     let totalDiscovered = 0;
 
     for (const userSettings of usersToProcess) {
-      // Check if social discovery is enabled (default true for backwards compat)
       const socialEnabled = (userSettings as any).social_discovery_enabled !== false;
       if (!socialEnabled) continue;
 
@@ -57,14 +55,21 @@ Deno.serve(async (req) => {
       const category = categories[Math.floor(Math.random() * categories.length)];
       const location = locations[Math.floor(Math.random() * locations.length)];
 
-      // Search Instagram and TikTok
+      // Search for Instagram/TikTok pages of businesses with NO separate website
       const platforms = [
-        { name: "instagram", query: `site:instagram.com ${category} ${location} Kenya business` },
-        { name: "tiktok", query: `site:tiktok.com ${category} ${location} Kenya business` },
+        {
+          name: "instagram",
+          // Target IG pages where the bio has NO website link — phone/WhatsApp only businesses
+          query: `site:instagram.com "${category}" "${location}" Kenya -".co.ke" -".com" phone OR WhatsApp OR "contact us"`,
+        },
+        {
+          name: "tiktok",
+          query: `site:tiktok.com "${category}" "${location}" Kenya business "no website" OR phone OR WhatsApp`,
+        },
       ];
 
       for (const platform of platforms) {
-        console.log(`Social discovery [${platform.name}]: ${platform.query}`);
+        console.log(`Social discovery [${platform.name}] no-website filter: ${platform.query}`);
 
         const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
           method: "POST",
@@ -90,15 +95,17 @@ Deno.serve(async (req) => {
         const results = searchData.data || [];
         if (results.length === 0) continue;
 
-        // AI extraction for social media leads
-        const extractionPrompt = `Analyze these ${platform.name} search results and extract Kenyan business leads.
+        // Strict no-website extraction prompt for social media
+        const extractionPrompt = `You are extracting Kenyan business leads from ${platform.name} pages.
 
-These are ${platform.name} profiles/pages of businesses. Extract:
-- Business name
-- ${platform.name} handle/username
-- Any contact info visible (email in bio, phone, WhatsApp link)
-- Business category and location
-- Whether they have a separate website mentioned
+STRICT RULES — NO EXCEPTIONS:
+1. ONLY extract businesses that have NO separate website of their own
+2. If the bio, description, or any content shows a custom domain (e.g. "businessname.co.ke", "businessname.com", any website URL that is NOT instagram/tiktok/facebook/linktr.ee), set has_website: true — these will be SKIPPED
+3. A business whose ENTIRE online presence is just this ${platform.name} page is our PERFECT TARGET
+4. A linktree that only links to social pages (not a website domain) is acceptable
+5. Extract phone numbers aggressively — WhatsApp numbers in bios are gold
+6. Extract any emails visible in the bio or description
+7. The ${platform.name} handle/username is the primary social identifier
 
 Search results:
 ${results.map((r: any, i: number) => `
@@ -109,7 +116,7 @@ Description: ${r.description || ""}
 Content: ${(r.markdown || "").substring(0, 600)}
 `).join("\n")}
 
-Category: ${category}. Location: ${location}.`;
+Target category: ${category}. Target location: ${location}, Kenya.`;
 
         const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
@@ -120,14 +127,14 @@ Category: ${category}. Location: ${location}.`;
           body: JSON.stringify({
             model: "google/gemini-3-flash-preview",
             messages: [
-              { role: "system", content: "Extract structured business data from social media search results." },
+              { role: "system", content: `Extract ONLY businesses with NO website from ${platform.name} search results. Businesses relying solely on social media are ideal leads for web development services.` },
               { role: "user", content: extractionPrompt },
             ],
             tools: [{
               type: "function",
               function: {
                 name: "extract_social_businesses",
-                description: "Extract business leads from social media",
+                description: "Extract no-website business leads from social media",
                 parameters: {
                   type: "object",
                   properties: {
@@ -143,13 +150,11 @@ Category: ${category}. Location: ${location}.`;
                           phone: { type: "string" },
                           email: { type: "string" },
                           whatsapp: { type: "string" },
-                          website_url: { type: "string" },
                           has_website: { type: "boolean" },
                           profile_url: { type: "string" },
                           bio_summary: { type: "string" },
-                          linkedin_url: { type: "string" },
                         },
-                        required: ["business_name"],
+                        required: ["business_name", "has_website"],
                         additionalProperties: false,
                       },
                     },
@@ -177,7 +182,11 @@ Category: ${category}. Location: ${location}.`;
           } catch { /* skip */ }
         }
 
-        for (const biz of businesses) {
+        // HARD FILTER — drop any business the AI flagged as having a website
+        const noWebsiteBusinesses = businesses.filter(b => !b.has_website);
+        console.log(`[${platform.name}] Extracted ${businesses.length}, ${noWebsiteBusinesses.length} passed no-website filter`);
+
+        for (const biz of noWebsiteBusinesses) {
           const { data: existing } = await supabase
             .from("leads")
             .select("id")
@@ -192,27 +201,26 @@ Category: ${category}. Location: ${location}.`;
           if (biz.phone) contactChannels.push({ type: "phone", value: biz.phone });
           if (biz.whatsapp) contactChannels.push({ type: "whatsapp", value: biz.whatsapp });
           if (biz.handle) contactChannels.push({ type: `${platform.name}_dm`, handle: biz.handle });
-          if (biz.linkedin_url) contactChannels.push({ type: "linkedin", url: biz.linkedin_url });
 
           // Build social_links
           const socialLinks: any = {};
           if (biz.profile_url) socialLinks[platform.name] = biz.profile_url;
-          if (biz.linkedin_url) socialLinks.linkedin = biz.linkedin_url;
+          if (biz.handle) socialLinks[`${platform.name}_handle`] = biz.handle;
 
           const { data: newLead, error: leadError } = await supabase.from("leads").insert({
             user_id: userSettings.user_id,
             business_name: biz.business_name,
             category: biz.category || category,
             location: biz.location || location,
-            phone: biz.phone || null,
+            phone: biz.phone || biz.whatsapp || null,
             email: biz.email || null,
-            website_url: biz.website_url || null,
-            has_website: biz.has_website ?? false,
+            website_url: null,
+            has_website: false,
             notes: biz.bio_summary || null,
             status: "qualified",
             discovery_source: platform.name,
-            contact_channels: contactChannels,
-            social_links: socialLinks,
+            contact_channels: contactChannels.length > 0 ? contactChannels : null,
+            social_links: Object.keys(socialLinks).length > 0 ? socialLinks : null,
           }).select("id").single();
 
           if (leadError || !newLead) continue;
@@ -221,19 +229,21 @@ Category: ${category}. Location: ${location}.`;
           // Inline analysis
           try {
             const portfolioProjects = userSettings.portfolio_projects || [];
-            const analysisPrompt = `Analyze this business lead found on ${platform.name}.
+            const analysisPrompt = `Analyze this Kenyan business found on ${platform.name} with NO website.
 
 Business: ${biz.business_name}
 Category: ${biz.category || category}
 Location: ${biz.location || location}
-Has Website: ${biz.has_website ? "Yes" : "No"}
-Social Handle: @${biz.handle || "unknown"}
-Contact channels: ${JSON.stringify(contactChannels)}
+${platform.name} Handle: @${biz.handle || "unknown"}
+Contact: phone=${biz.phone || "none"}, whatsapp=${biz.whatsapp || "none"}, email=${biz.email || "none"}
 Bio: ${biz.bio_summary || "N/A"}
+
+Their entire online presence is just a ${platform.name} page — no website at all.
+This makes them an ideal target for web development services.
 
 My portfolio: ${JSON.stringify(portfolioProjects)}
 
-Provide priority score 1-10, pain points, solutions, and matched portfolio.`;
+Priority score 1-10, pain points, solutions, matched portfolio.`;
 
             const analysisResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
               method: "POST",
@@ -300,7 +310,7 @@ Provide priority score 1-10, pain points, solutions, and matched portfolio.`;
         await supabase.from("activity_logs").insert({
           user_id: userSettings.user_id,
           action: "auto_discovery",
-          details: { source: "social_media", leads_added: totalDiscovered, platforms: ["instagram", "tiktok"] },
+          details: { source: "social_media", leads_added: totalDiscovered, platforms: ["instagram", "tiktok"], filter: "no_website_only" },
         });
       }
     }

@@ -12,13 +12,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // This function is called by cron — use service role
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Get all users with autonomous mode enabled
     const { data: allSettings } = await supabase
       .from("settings")
       .select("*")
@@ -45,13 +43,19 @@ Deno.serve(async (req) => {
 
       if (categories.length === 0 || locations.length === 0) continue;
 
-      // Pick a random category and location for this run
       const category = categories[Math.floor(Math.random() * categories.length)];
       const location = locations[Math.floor(Math.random() * locations.length)];
 
-      const searchQuery = `${category} ${location} Kenya small business no website local`;
+      // Rotate through 3 GBP-focused query patterns targeting businesses with NO website
+      const queryIndex = Math.floor(Math.random() * 3);
+      const searchQueries = [
+        `"${category}" "${location}" Kenya "Google Maps" -site:*.co.ke -site:*.com -site:*.org`,
+        `"${category} ${location} Kenya" small business phone contact -inurl:.co.ke -inurl:.com`,
+        `"${category} near ${location}" Kenya "call us" OR "WhatsApp" OR "visit us" -site:*.co.ke`,
+      ];
+      const searchQuery = searchQueries[queryIndex];
 
-      console.log(`Auto-discovering for user ${userSettings.user_id}: ${searchQuery}`);
+      console.log(`GBP discovery [query ${queryIndex + 1}] for user ${userSettings.user_id}: ${searchQuery}`);
 
       const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
         method: "POST",
@@ -75,16 +79,21 @@ Deno.serve(async (req) => {
       }
 
       const results = searchData.data || [];
+      if (results.length === 0) continue;
 
-      // Extract businesses with AI
-      const extractionPrompt = `Analyze these search results and extract Kenyan business leads.
-We are specifically looking for businesses that do NOT have their own website.
+      // Strict GBP-focused extraction prompt — no-website businesses ONLY
+      const extractionPrompt = `You are extracting Kenyan business leads from Google Maps / Google Business Profile search results.
 
-IMPORTANT RULES:
-- If a business has its own domain/professional website, set has_website to true. These are LOW priority.
-- If a business is only found on directories (Google Maps, Yellow Pages, Facebook, Jumia, etc.), set has_website to false. These are our PRIMARY targets.
-- Focus on small/local businesses that would benefit from getting a website built for them.
-- Skip large chains or well-known franchises.
+STRICT RULES — NO EXCEPTIONS:
+1. ONLY extract businesses that have NO website of their own
+2. If a result shows a business domain (e.g. "businessname.co.ke", "businessname.com", any custom domain), set has_website: true — these will be SKIPPED entirely
+3. Acceptable sources for a valid lead: Google Maps listing, Yellow Pages, Facebook page, Yelp, local directory only
+4. A business whose only online presence is a Google Maps pin / Google Business Profile is our PERFECT TARGET
+5. Extract phone numbers aggressively — this is the primary contact method
+6. Extract any email addresses visible in the listing or description
+7. Store the Google Maps URL in google_maps_url field (maps.google.com or goo.gl/maps links)
+8. Extract the street/physical address into the address field
+9. Skip large chains, franchises, and any business with a professional website
 
 Search results:
 ${results.map((r: any, i: number) => `
@@ -92,10 +101,10 @@ Result ${i + 1}:
 URL: ${r.url}
 Title: ${r.title || ""}
 Description: ${r.description || ""}
-Content: ${(r.markdown || "").substring(0, 500)}
+Content: ${(r.markdown || "").substring(0, 600)}
 `).join("\n")}
 
-Extract actual businesses (not directory pages). Category: ${category}. Location: ${location}.`;
+Target category: ${category}. Target location: ${location}, Kenya.`;
 
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -106,14 +115,14 @@ Extract actual businesses (not directory pages). Category: ${category}. Location
         body: JSON.stringify({
           model: "google/gemini-3-flash-preview",
           messages: [
-            { role: "system", content: "Extract structured business data from search results." },
+            { role: "system", content: "You are a lead extraction specialist. Extract ONLY businesses with NO website from Google Business Profile / Google Maps search results." },
             { role: "user", content: extractionPrompt },
           ],
           tools: [{
             type: "function",
             function: {
               name: "extract_businesses",
-              description: "Extract business leads",
+              description: "Extract no-website business leads from Google Maps results",
               parameters: {
                 type: "object",
                 properties: {
@@ -125,13 +134,14 @@ Extract actual businesses (not directory pages). Category: ${category}. Location
                         business_name: { type: "string" },
                         category: { type: "string" },
                         location: { type: "string" },
+                        address: { type: "string" },
                         phone: { type: "string" },
                         email: { type: "string" },
-                        website_url: { type: "string" },
                         has_website: { type: "boolean" },
+                        google_maps_url: { type: "string" },
                         notes: { type: "string" },
                       },
-                      required: ["business_name"],
+                      required: ["business_name", "has_website"],
                       additionalProperties: false,
                     },
                   },
@@ -159,13 +169,15 @@ Extract actual businesses (not directory pages). Category: ${category}. Location
         } catch { /* skip */ }
       }
 
-      // Insert new leads, auto-qualify, and generate first-touch emails
-      const senderName = userSettings.company_name || "Emmanuel Kigen";
+      // HARD FILTER — code-level enforcement, no exceptions
+      const noWebsiteBusinesses = businesses.filter(b => !b.has_website);
+      console.log(`Extracted ${businesses.length} businesses, ${noWebsiteBusinesses.length} passed no-website filter`);
+
       const services = userSettings.services?.join(", ") || "web development, mobile apps, and digital solutions";
       const portfolio = userSettings.portfolio_links?.join(", ") || "";
       const signature = userSettings.email_signature || "Best regards,\nEmmanuel Kigen";
 
-      for (const biz of businesses) {
+      for (const biz of noWebsiteBusinesses) {
         const { data: existing } = await supabase
           .from("leads")
           .select("id")
@@ -175,7 +187,21 @@ Extract actual businesses (not directory pages). Category: ${category}. Location
 
         if (existing) continue;
 
-        // Insert lead as "qualified" (skip manual approval)
+        // Build social_links with google_maps_url
+        const socialLinks: any = {};
+        if (biz.google_maps_url) socialLinks.google_maps = biz.google_maps_url;
+
+        // Build contact_channels
+        const contactChannels: any[] = [];
+        if (biz.phone) contactChannels.push({ type: "phone", value: biz.phone });
+        if (biz.email) contactChannels.push({ type: "email", value: biz.email });
+
+        // Compose notes with address + any extra info
+        const noteParts = [];
+        if (biz.address) noteParts.push(`Address: ${biz.address}`);
+        if (biz.notes) noteParts.push(biz.notes);
+        if (biz.google_maps_url) noteParts.push(`Maps: ${biz.google_maps_url}`);
+
         const { data: newLead, error: leadError } = await supabase.from("leads").insert({
           user_id: userSettings.user_id,
           business_name: biz.business_name,
@@ -183,38 +209,43 @@ Extract actual businesses (not directory pages). Category: ${category}. Location
           location: biz.location || location,
           phone: biz.phone || null,
           email: biz.email || null,
-          website_url: biz.website_url || null,
-          has_website: biz.has_website ?? false,
-          notes: biz.notes || null,
+          website_url: null,
+          has_website: false,
+          notes: noteParts.join(" | ") || null,
           status: "qualified",
+          discovery_source: "google_maps",
+          contact_channels: contactChannels.length > 0 ? contactChannels : null,
+          social_links: Object.keys(socialLinks).length > 0 ? socialLinks : null,
         }).select("id").single();
 
         if (leadError || !newLead) continue;
         totalDiscovered++;
 
-        // --- Inline Analyst Agent: analyze lead before email generation ---
+        // Inline lead analysis
         let analysis: any = null;
         try {
           const portfolioProjects = userSettings.portfolio_projects || [];
-          const analysisPrompt = `Analyze this business lead and provide intelligence for a web developer doing outreach.
+          const analysisPrompt = `Analyze this Kenyan business found on Google Maps with NO website.
 
 Business: ${biz.business_name}
 Category: ${biz.category || category}
 Location: ${biz.location || location}
-Has Website: ${biz.has_website ? "Yes" : "No"}
-Website URL: ${biz.website_url || "None"}
-Email: ${biz.email || "None"}
+Address: ${biz.address || "Unknown"}
 Phone: ${biz.phone || "None"}
-Notes: ${biz.notes || "None"}
+Email: ${biz.email || "None"}
+Google Maps: ${biz.google_maps_url || "None"}
 
-My portfolio projects for reference:
+This business has NO website — they rely entirely on word of mouth and foot traffic.
+They are our IDEAL target for web development services.
+
+My portfolio projects:
 ${JSON.stringify(portfolioProjects, null, 2)}
 
 Provide:
-1. Specific pain points this business likely has (related to not having / having a poor website)
-2. Recommended solutions you'd propose
-3. Which of my portfolio projects are most relevant and why
-4. A priority score from 1-10 based on: no website (high priority), has email (can contact), business size signals, industry fit for web dev services`;
+1. Pain points from having no website (lost customers, no online bookings, no credibility, etc.)
+2. Specific website features they would benefit from
+3. Which portfolio projects to reference and why
+4. Priority score 1-10 (no website + phone only = high priority, has email too = higher)`;
 
           const analysisResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
@@ -278,7 +309,6 @@ Provide:
         // Only generate email if lead has an email address
         if (!biz.email) continue;
 
-        // Build enriched email prompt using analysis data
         const painPointsText = analysis?.pain_points?.length
           ? `\nKey pain points identified:\n${analysis.pain_points.map((p: string) => `- ${p}`).join("\n")}`
           : "";
@@ -289,19 +319,21 @@ Provide:
           ? `\nRelevant portfolio examples to mention:\n${analysis.matched_portfolio.map((p: any) => `- ${p.url}: ${p.reason}`).join("\n")}`
           : portfolio ? `- Mention your portfolio: ${portfolio}` : "";
 
-        const emailPrompt = `You are Emmanuel Kigen, a freelance web developer reaching out personally to ${biz.business_name}, a ${biz.category || category} business in ${biz.location || location}.
+        const emailPrompt = `You are Emmanuel Kigen, a freelance web developer reaching out to ${biz.business_name}, a ${biz.category || category} business in ${biz.location || location}, Kenya.
 
-Write a compelling personal cold email:
-- They don't have a website, which means they're missing out on online customers
-- Reference their specific industry and how a website can help them
-- Present yourself as a freelance web developer who personally offers: ${services}
+They have NO website — only a Google Maps listing. This means they're losing customers to competitors online every day.
+
+Write a compelling, personal cold email:
+- Reference their specific business type and location
+- Explain how a website would help them get more customers and appear professional
+- Present yourself as a local freelance web developer: ${services}
 ${painPointsText}
 ${solutionsText}
 ${portfolioMatchText}
-- Keep it personal, warm, and genuine — reference specific details about their business
-- End with a soft call-to-action (suggest a brief call or WhatsApp chat)
+- Keep it warm, genuine, and concise (not a template blast)
+- End with a soft CTA — suggest a quick WhatsApp chat or phone call
 - Sign off as Emmanuel Kigen
-${signature ? `- Use this signature: ${signature}` : ""}`;
+${signature ? `- Signature: ${signature}` : ""}`;
 
         try {
           const emailAiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -313,7 +345,7 @@ ${signature ? `- Use this signature: ${signature}` : ""}`;
             body: JSON.stringify({
               model: "google/gemini-3-flash-preview",
               messages: [
-                { role: "system", content: "You are writing emails on behalf of Emmanuel Kigen, a freelance web developer doing personal outreach to East African businesses." },
+                { role: "system", content: "You are writing personalized cold emails on behalf of Emmanuel Kigen, a freelance web developer targeting Kenyan small businesses with no website." },
                 { role: "user", content: emailPrompt },
               ],
               tools: [{
@@ -348,6 +380,7 @@ ${signature ? `- Use this signature: ${signature}` : ""}`;
                 body: email.body,
                 template_type: "first_touch",
                 status: "draft",
+                channel: "email",
               });
             }
           }
@@ -360,11 +393,11 @@ ${signature ? `- Use this signature: ${signature}` : ""}`;
       await supabase.from("activity_logs").insert({
         user_id: userSettings.user_id,
         action: "auto_discovery",
-        details: { category, location, leads_added: totalDiscovered, autonomous: true },
+        details: { source: "google_maps", category, location, leads_added: totalDiscovered, query_pattern: queryIndex + 1 },
       });
     }
 
-    // --- Chain: Social Media Discovery ---
+    // Chain: Social Media Discovery
     try {
       const socialUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/social-discover`;
       await fetch(socialUrl, {
@@ -380,7 +413,7 @@ ${signature ? `- Use this signature: ${signature}` : ""}`;
       console.error("Failed to trigger social-discover:", e);
     }
 
-    // --- Chain: Daily Outreach ---
+    // Chain: Daily Outreach
     try {
       const outreachUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/daily-outreach`;
       await fetch(outreachUrl, {
