@@ -187,6 +187,12 @@ Target category: ${category}. Target location: ${location}, Kenya.`;
         console.log(`[${platform.name}] Extracted ${businesses.length}, ${noWebsiteBusinesses.length} passed no-website filter`);
 
         for (const biz of noWebsiteBusinesses) {
+          // Skip leads with no contact info at all — can't reach them
+          if (!biz.phone && !biz.whatsapp && !biz.email) {
+            console.log(`Skipping ${biz.business_name} — no contact info`);
+            continue;
+          }
+
           const { data: existing } = await supabase
             .from("leads")
             .select("id")

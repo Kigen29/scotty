@@ -169,15 +169,20 @@ Target category: ${category}. Target location: ${location}, Kenya.`;
         } catch { /* skip */ }
       }
 
-      // HARD FILTER — code-level enforcement, no exceptions
-      const noWebsiteBusinesses = businesses.filter(b => !b.has_website);
-      console.log(`Extracted ${businesses.length} businesses, ${noWebsiteBusinesses.length} passed no-website filter`);
+        // HARD FILTER — code-level enforcement, no exceptions
+        const noWebsiteBusinesses = businesses.filter(b => !b.has_website);
+        console.log(`Extracted ${businesses.length} businesses, ${noWebsiteBusinesses.length} passed no-website filter`);
 
-      const services = userSettings.services?.join(", ") || "web development, mobile apps, and digital solutions";
-      const portfolio = userSettings.portfolio_links?.join(", ") || "";
-      const signature = userSettings.email_signature || "Best regards,\nEmmanuel Kigen";
+        const services = userSettings.services?.join(", ") || "web development, mobile apps, and digital solutions";
+        const portfolio = userSettings.portfolio_links?.join(", ") || "";
+        const signature = userSettings.email_signature || "Best regards,\nEmmanuel Kigen";
 
-      for (const biz of noWebsiteBusinesses) {
+        for (const biz of noWebsiteBusinesses) {
+          // Skip leads with no contact info at all — can't reach them
+          if (!biz.phone && !biz.email) {
+            console.log(`Skipping ${biz.business_name} — no contact info`);
+            continue;
+          }
         const { data: existing } = await supabase
           .from("leads")
           .select("id")
