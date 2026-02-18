@@ -1,122 +1,66 @@
 
-## Refocusing Discovery Agents: Google Business Profile Leads with No Website
+## Changes: Clean Up Lead Cards & Enforce Contact Info
 
-### The Problem with the Current Approach
+### What's changing
 
-Right now the agents search for businesses using general web queries and social media, then filter by `has_website`. The issue is:
-
-- The search queries return a mix of results — some businesses already have professional websites, some are on directories, some are on social media
-- The AI is doing "post-filter" filtering (find everything, then check if they have a website)
-- This wastes API calls on businesses that are already served
-- The social-discover agent finds Instagram/TikTok pages, but many of those businesses also have websites
-
-### The New Approach: Google Business Profile (GBP) as the Source of Truth
-
-Google Business Profiles are the ideal data source because:
-- A business with a GBP but no website is **explicitly** signaling they have no web presence
-- Google even marks these profiles with "No website" in Maps results
-- GBP listings contain phone numbers, addresses, categories, and sometimes emails — ready to use
-- This is where most small Kenyan businesses actually live (Google Maps / local search)
+Three focused changes to `src/pages/LeadDiscovery.tsx` and `supabase/functions/auto-discover/index.ts`:
 
 ---
 
-## What Changes
+### 1. Remove the website filter bar (UI)
 
-### 1. `auto-discover` — Complete Search Strategy Overhaul
+The "All / No Website / Has Website" filter buttons are no longer meaningful since the pipeline now exclusively discovers businesses without websites. These buttons will be removed entirely.
 
-**New search queries** specifically targeting Google Business Profiles with no website:
+The `WebsiteFilter` type, `websiteFilter` state, `noWebsiteCount`/`hasWebsiteCount` variables, and the filter bar JSX block will all be deleted.
 
-- `"${category} ${location} Kenya" site:maps.google.com`
-- `"${category} ${location} Kenya" -site:*.co.ke -site:*.com "Google Maps"`
-- `"${category} near ${location}" Kenya "no website" OR "visit us at" OR "call us"`
-- Firecrawl's country filter `ke` ensures Kenyan results
+The "No Website" / "Website" indicator in the top-right of each card will also be removed — it's redundant noise since every lead by definition has no website.
 
-**New AI extraction prompt** — strictly enforces the no-website rule:
-- `has_website: true` → **skip entirely, do not insert**
-- Only accept leads where the business is ONLY found on Google Maps, directories, or social profiles
-- Extract: business name, phone, email, Google Maps URL, category, location, address
-- The `google_maps_url` is stored in `social_links.google_maps` so you can verify the lead
-
-**Hard filter in code**: After AI extraction, add a code-level check — if `has_website === true`, skip that business regardless of what the AI says. This double-ensures no website-having businesses slip through.
-
-**New `discovery_source` value**: `'google_maps'` for web-discovered leads found via Google Business Profiles (more accurate than just `'web'`).
+The date filter (Today, This Week, etc.) stays — that's still useful.
 
 ---
 
-### 2. `social-discover` — Also Filtered to No-Website Businesses
+### 2. Add a Google Maps link to each lead card (UI)
 
-The social discover agent currently searches Instagram/TikTok broadly. It will be updated so that:
-- The AI extraction prompt explicitly says: **only extract businesses that have NO separate website** — if a business has `website_url` in their bio, skip them
-- The `has_website` field is enforced — businesses with websites are dropped at the code level too
-- Social media platforms (Instagram, TikTok) are themselves treated as indicators of no-website status — a business whose entire digital presence is an Instagram page is a perfect lead
+Each lead card will get a "View on Google Maps" button in the card footer. It reads from `lead.social_links?.google_maps` (already stored by the agent). For Instagram/TikTok leads, it falls back to `lead.social_links?.instagram` or `lead.social_links?.tiktok`.
 
----
-
-### 3. What Stays the Same
-
-- `daily-outreach` — no changes needed. It already picks the hottest leads and contacts them via the best available channel (Email → WhatsApp → Instagram DM → LinkedIn)
-- `auto-discover` still chains to `social-discover` → `daily-outreach` at the end
-- Database schema — no new columns needed, just better data going in
+The link opens in a new tab with a map pin icon so you can quickly look up the business yourself.
 
 ---
 
-## Files to Change
+### 3. Enforce that leads must have at least one contact method before being saved (agent)
 
-| File | What Changes |
-|---|---|
-| `supabase/functions/auto-discover/index.ts` | New GBP-focused search queries, stricter AI extraction prompt, code-level `has_website` filter, `discovery_source: 'google_maps'` |
-| `supabase/functions/social-discover/index.ts` | Stricter AI prompt (no-website only), code-level `has_website` filter on social leads too |
-
----
-
-## Technical Details
-
-### New Search Queries in `auto-discover`
-
-Instead of one generic query, the agent will rotate through 3 targeted query patterns per run:
-
-```text
-Query 1: "${category} ${location} Kenya" "Google Maps" "No website"
-Query 2: "${category} ${location} Kenya small business" -inurl:.co.ke -inurl:.com/
-Query 3: "${category} near ${location}" Kenya phone contact
-```
-
-These target businesses that only appear in Google Maps/directory results, not those with their own domains.
-
-### New AI Prompt Rules (auto-discover)
-
-```text
-STRICT RULES - NO EXCEPTIONS:
-1. ONLY extract businesses with NO website of their own
-2. If a result shows a business domain (e.g. "businessname.co.ke", "businessname.com"), 
-   set has_website: true — these will be SKIPPED
-3. Acceptable sources: Google Maps listing, Yellow Pages, Yelp, Facebook page only
-4. Extract phone numbers aggressively — this is our primary contact method
-5. Extract any email addresses visible in the listing
-6. Store the Google Maps URL as the source reference
-```
-
-### Code-Level Hard Filter
+In `auto-discover/index.ts`, before inserting a new lead, add a guard:
 
 ```typescript
-// After AI extraction — hard filter, no exceptions
-const noWebsiteBusinesses = businesses.filter(b => !b.has_website);
-// Only insert noWebsiteBusinesses
+// Skip leads with no contact info at all
+if (!biz.phone && !biz.email) {
+  console.log(`Skipping ${biz.business_name} — no contact info`);
+  continue;
+}
 ```
 
-### New Lead Fields Populated
+This ensures every lead that enters the system has at minimum a phone number or email. Leads with no way to contact them are useless and waste database space.
 
-- `discovery_source`: `'google_maps'` (web agent) or `'instagram'`/`'tiktok'` (social agent)
-- `social_links.google_maps`: the Maps URL for verification
-- `phone`: extracted from GBP listing (primary contact method)
-- `notes`: address and any other GBP details
+The same guard will be added to `social-discover/index.ts` for consistency.
 
 ---
 
-## Result
+### Technical Details
 
-After this change, every lead that enters the system will be a business that:
-1. Has a Google presence (real, findable business)
-2. Has NO website of their own
-3. Has at least one contact method (phone number from GBP, or email, or social handle)
-4. Is ready for the daily-outreach agent to contact them about getting a website built
+**Files changing:**
+| File | What changes |
+|---|---|
+| `src/pages/LeadDiscovery.tsx` | Remove website filter bar + website indicator badge; add Google Maps / social profile link button on each card |
+| `supabase/functions/auto-discover/index.ts` | Add `!biz.phone && !biz.email` guard before insert |
+| `supabase/functions/social-discover/index.ts` | Add same contact info guard before insert |
+
+**The Google Maps link logic:**
+```typescript
+const mapsUrl = lead.social_links?.google_maps 
+  || lead.social_links?.instagram 
+  || lead.social_links?.tiktok;
+// If no stored URL, fall back to a Google search link:
+// `https://www.google.com/search?q=${encodeURIComponent(lead.business_name + ' ' + lead.location)}`
+```
+
+This means even leads that don't have a stored Maps URL will get a fallback "Search on Google" link so you can still look them up easily.
