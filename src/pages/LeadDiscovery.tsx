@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Globe, Phone, Mail, MapPin, CheckCircle2, X, Loader2, Filter, Star, Brain, Instagram, Linkedin, MessageCircle } from "lucide-react";
+import { Search, Globe, Phone, Mail, MapPin, CheckCircle2, X, Loader2, Star, Brain, Instagram, Linkedin, MessageCircle, ExternalLink } from "lucide-react";
 import { DateFilter, type DateRange } from "@/components/DateFilter";
 
 const categories = ["restaurants", "salons", "hardware stores", "clinics", "retail shops", "schools", "hotels", "pharmacies"];
@@ -26,6 +26,7 @@ const statusColors: Record<string, string> = {
 
 const sourceIcons: Record<string, React.ReactNode> = {
   web: <Globe className="h-3 w-3" />,
+  google_maps: <MapPin className="h-3 w-3" />,
   instagram: <Instagram className="h-3 w-3" />,
   tiktok: <span className="text-[10px] font-bold">TT</span>,
   linkedin: <Linkedin className="h-3 w-3" />,
@@ -33,12 +34,11 @@ const sourceIcons: Record<string, React.ReactNode> = {
 
 const sourceColors: Record<string, string> = {
   web: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  google_maps: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
   instagram: "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",
   tiktok: "bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-300",
   linkedin: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
 };
-
-type WebsiteFilter = "all" | "no_website" | "has_website";
 
 const PriorityStars = ({ score }: { score: number }) => {
   const filled = Math.min(5, Math.round(score / 2));
@@ -60,7 +60,6 @@ const LeadDiscovery = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [generatingEmail, setGeneratingEmail] = useState<string | null>(null);
-  const [websiteFilter, setWebsiteFilter] = useState<WebsiteFilter>("all");
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   const generateEmail = async (leadId: string) => {
@@ -119,8 +118,6 @@ const LeadDiscovery = () => {
   };
 
   const filteredLeads = leads.filter((lead) => {
-    if (websiteFilter === "no_website" && lead.has_website) return false;
-    if (websiteFilter === "has_website" && !lead.has_website) return false;
     if (dateRange) {
       const d = new Date(lead.discovered_at || lead.created_at);
       if (d < dateRange.from || d > dateRange.to) return false;
@@ -128,8 +125,23 @@ const LeadDiscovery = () => {
     return true;
   });
 
-  const noWebsiteCount = leads.filter((l) => !l.has_website).length;
-  const hasWebsiteCount = leads.filter((l) => l.has_website).length;
+  const getProfileUrl = (lead: any): string => {
+    const social = lead.social_links as any;
+    return (
+      social?.google_maps ||
+      social?.instagram ||
+      social?.tiktok ||
+      `https://www.google.com/search?q=${encodeURIComponent(`${lead.business_name} ${lead.location || ""} Kenya`)}`
+    );
+  };
+
+  const getProfileLabel = (lead: any): string => {
+    const social = lead.social_links as any;
+    if (social?.google_maps) return "View on Google Maps";
+    if (social?.instagram) return "View on Instagram";
+    if (social?.tiktok) return "View on TikTok";
+    return "Search on Google";
+  };
 
   return (
     <div className="p-8 space-y-6">
@@ -179,29 +191,6 @@ const LeadDiscovery = () => {
         </CardContent>
       </Card>
 
-      {/* Filter Bar */}
-      {leads.length > 0 && (
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground mr-1">Filter:</span>
-          {([
-            { value: "all" as WebsiteFilter, label: `All (${leads.length})` },
-            { value: "no_website" as WebsiteFilter, label: `No Website (${noWebsiteCount})` },
-            { value: "has_website" as WebsiteFilter, label: `Has Website (${hasWebsiteCount})` },
-          ]).map((f) => (
-            <Button
-              key={f.value}
-              size="sm"
-              variant={websiteFilter === f.value ? "default" : "outline"}
-              onClick={() => setWebsiteFilter(f.value)}
-              className="text-xs"
-            >
-              {f.label}
-            </Button>
-          ))}
-        </div>
-      )}
-
       {/* Leads List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <TooltipProvider>
@@ -210,6 +199,8 @@ const LeadDiscovery = () => {
             const priorityScore = lead.priority_score || 5;
             const source = (lead as any).discovery_source || "web";
             const contactChannels: any[] = (lead as any).contact_channels || [];
+            const profileUrl = getProfileUrl(lead);
+            const profileLabel = getProfileLabel(lead);
             return (
               <Card key={lead.id} className="relative border border-border">
                 <CardContent className="p-5">
@@ -222,22 +213,11 @@ const LeadDiscovery = () => {
                           {lead.status.replace("_", " ")}
                         </Badge>
                         <Badge className={`text-xs border-0 gap-1 ${sourceColors[source] || sourceColors.web}`}>
-                          {sourceIcons[source]} {source}
+                          {sourceIcons[source]} {source.replace("_", " ")}
                         </Badge>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
-                      {lead.has_website ? (
-                        <div className="flex items-center gap-1">
-                          <Globe className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                          <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Website</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <Globe className="h-4 w-4 text-red-500 dark:text-red-400" />
-                          <span className="text-xs text-red-600 dark:text-red-400 font-medium">No Website</span>
-                        </div>
-                      )}
                       <PriorityStars score={priorityScore} />
                     </div>
                   </div>
@@ -315,6 +295,21 @@ const LeadDiscovery = () => {
                   )}
 
                   <div className="flex gap-2 mt-4">
+                    {/* Google Maps / profile link */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      asChild
+                      className="text-xs"
+                    >
+                      <a href={profileUrl} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                        {profileLabel}
+                      </a>
+                    </Button>
+                  </div>
+
+                  <div className="flex gap-2 mt-2">
                     {lead.status === "discovered" && (
                       <>
                         <Button size="sm" onClick={() => updateLeadStatus(lead.id, "qualified")} className="flex-1">
@@ -349,9 +344,9 @@ const LeadDiscovery = () => {
 
       {leads.length > 0 && filteredLeads.length === 0 && (
         <div className="text-center py-16 text-muted-foreground">
-          <Filter className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p className="text-lg">No leads match this filter</p>
-          <p className="text-sm">Try changing the date or filter above</p>
+          <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <p className="text-lg">No leads match this date range</p>
+          <p className="text-sm">Try changing the date filter above</p>
         </div>
       )}
     </div>
