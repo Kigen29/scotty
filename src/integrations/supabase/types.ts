@@ -209,6 +209,7 @@ export type Database = {
           company_website: string | null
           created_at: string
           daily_send_limit: number | null
+          discovery_pipeline: string | null
           email_signature: string | null
           follow_up_intervals: number[] | null
           id: string
@@ -231,6 +232,7 @@ export type Database = {
           company_website?: string | null
           created_at?: string
           daily_send_limit?: number | null
+          discovery_pipeline?: string | null
           email_signature?: string | null
           follow_up_intervals?: number[] | null
           id?: string
@@ -253,6 +255,7 @@ export type Database = {
           company_website?: string | null
           created_at?: string
           daily_send_limit?: number | null
+          discovery_pipeline?: string | null
           email_signature?: string | null
           follow_up_intervals?: number[] | null
           id?: string
