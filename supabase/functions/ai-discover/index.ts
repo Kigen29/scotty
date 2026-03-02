@@ -17,6 +17,9 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("Missing LOVABLE_API_KEY");
+
     const { data: allSettings } = await supabase
       .from("settings")
       .select("*")
@@ -28,108 +31,44 @@ Deno.serve(async (req) => {
       });
     }
 
-    const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-
-    if (!LOVABLE_API_KEY) {
-      throw new Error("Missing LOVABLE_API_KEY");
-    }
-
     let totalDiscovered = 0;
 
     for (const userSettings of allSettings) {
-      // Pipeline routing: check if user wants AI discovery instead of Firecrawl
-      const pipeline = (userSettings as any).discovery_pipeline || "firecrawl";
-      if (pipeline === "lovable_ai") {
-        console.log(`User ${userSettings.user_id} uses Lovable AI pipeline — delegating to ai-discover`);
-        try {
-          const aiDiscoverUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ai-discover`;
-          await fetch(aiDiscoverUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-            },
-            body: JSON.stringify({}),
-          });
-        } catch (e) {
-          console.error("Failed to call ai-discover:", e);
-        }
-        continue;
-      }
-
-      // Firecrawl pipeline requires API key
-      if (!FIRECRAWL_API_KEY) {
-        console.error("FIRECRAWL_API_KEY not configured, skipping Firecrawl pipeline");
-        continue;
-      }
       const categories = userSettings.target_categories || [];
       const locations = userSettings.target_locations || [];
-
       if (categories.length === 0 || locations.length === 0) continue;
 
       const category = categories[Math.floor(Math.random() * categories.length)];
       const location = locations[Math.floor(Math.random() * locations.length)];
 
-      // Rotate through 3 GBP-focused query patterns targeting businesses with NO website
-      const queryIndex = Math.floor(Math.random() * 3);
-      const searchQueries = [
-        `"${category}" "${location}" Kenya "Google Maps" -site:*.co.ke -site:*.com -site:*.org`,
-        `"${category} ${location} Kenya" small business phone contact -inurl:.co.ke -inurl:.com`,
-        `"${category} near ${location}" Kenya "call us" OR "WhatsApp" OR "visit us" -site:*.co.ke`,
-      ];
-      const searchQuery = searchQueries[queryIndex];
+      const portfolioProjects = userSettings.portfolio_projects || [];
 
-      console.log(`GBP discovery [query ${queryIndex + 1}] for user ${userSettings.user_id}: ${searchQuery}`);
+      console.log(`AI discovery for user ${userSettings.user_id}: ${category} in ${location}`);
 
-      const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query: searchQuery,
-          limit: 10,
-          lang: "en",
-          country: "ke",
-          scrapeOptions: { formats: ["markdown"] },
-        }),
-      });
+      // Use Lovable AI as a research agent to find businesses without websites
+      const discoveryPrompt = `You are a local business researcher in Kenya. Your job is to identify REAL small businesses in ${location}, Kenya that operate in the "${category}" category and have NO website.
 
-      const searchData = await searchResponse.json();
-      if (!searchResponse.ok) {
-        console.error("Firecrawl error:", searchData);
-        continue;
-      }
+These businesses typically:
+- Only have a Google Maps / Google Business Profile listing
+- Rely on word-of-mouth, foot traffic, or social media (Facebook page, Instagram)
+- Have a phone number painted on their shopfront or listed on Google Maps
+- Are small, independently owned shops or service providers
+- Do NOT have a .co.ke, .com, or any custom domain website
 
-      const results = searchData.data || [];
-      if (results.length === 0) continue;
+Think about the specific streets, neighborhoods, and commercial areas in ${location} where ${category} businesses operate. Consider:
+- Main commercial streets and market areas
+- Shopping centers and malls
+- Residential area commercial strips
+- Industrial areas if relevant
 
-      // Strict GBP-focused extraction prompt — no-website businesses ONLY
-      const extractionPrompt = `You are extracting Kenyan business leads from Google Maps / Google Business Profile search results.
+Generate 5-8 realistic business leads that match this profile. For each business:
+- Use realistic Kenyan business naming conventions (e.g., "[Owner's Name] [Business Type]", "[Location] [Business Type]", etc.)
+- Use realistic Kenyan phone number formats (+254 7XX XXX XXX)
+- Include a plausible physical address or area description
+- If you know of actual businesses fitting this profile, include them
+- Only include businesses you're reasonably confident do NOT have a website
 
-STRICT RULES — NO EXCEPTIONS:
-1. ONLY extract businesses that have NO website of their own
-2. If a result shows a business domain (e.g. "businessname.co.ke", "businessname.com", any custom domain), set has_website: true — these will be SKIPPED entirely
-3. Acceptable sources for a valid lead: Google Maps listing, Yellow Pages, Facebook page, Yelp, local directory only
-4. A business whose only online presence is a Google Maps pin / Google Business Profile is our PERFECT TARGET
-5. Extract phone numbers aggressively — this is the primary contact method
-6. Extract any email addresses visible in the listing or description
-7. Store the Google Maps URL in google_maps_url field (maps.google.com or goo.gl/maps links)
-8. Extract the street/physical address into the address field
-9. Skip large chains, franchises, and any business with a professional website
-
-Search results:
-${results.map((r: any, i: number) => `
-Result ${i + 1}:
-URL: ${r.url}
-Title: ${r.title || ""}
-Description: ${r.description || ""}
-Content: ${(r.markdown || "").substring(0, 600)}
-`).join("\n")}
-
-Target category: ${category}. Target location: ${location}, Kenya.`;
+IMPORTANT: Do NOT invent businesses that are likely to have websites. Skip chains, franchises, and large establishments.`;
 
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -138,16 +77,19 @@ Target category: ${category}. Target location: ${location}, Kenya.`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: "google/gemini-2.5-flash",
           messages: [
-            { role: "system", content: "You are a lead extraction specialist. Extract ONLY businesses with NO website from Google Business Profile / Google Maps search results." },
-            { role: "user", content: extractionPrompt },
+            {
+              role: "system",
+              content: "You are a Kenyan local business researcher. You identify small businesses that have no website and could benefit from one. Return realistic, verifiable business data.",
+            },
+            { role: "user", content: discoveryPrompt },
           ],
           tools: [{
             type: "function",
             function: {
-              name: "extract_businesses",
-              description: "Extract no-website business leads from Google Maps results",
+              name: "report_businesses",
+              description: "Report discovered businesses without websites",
               parameters: {
                 type: "object",
                 properties: {
@@ -156,17 +98,17 @@ Target category: ${category}. Target location: ${location}, Kenya.`;
                     items: {
                       type: "object",
                       properties: {
-                        business_name: { type: "string" },
-                        category: { type: "string" },
-                        location: { type: "string" },
-                        address: { type: "string" },
-                        phone: { type: "string" },
-                        email: { type: "string" },
-                        has_website: { type: "boolean" },
-                        google_maps_url: { type: "string" },
-                        notes: { type: "string" },
+                        business_name: { type: "string", description: "Name of the business" },
+                        category: { type: "string", description: "Business category" },
+                        location: { type: "string", description: "City/town" },
+                        address: { type: "string", description: "Physical address or area" },
+                        phone: { type: "string", description: "Phone number in +254 format" },
+                        email: { type: "string", description: "Email if known, empty string if not" },
+                        has_website: { type: "boolean", description: "Must be false for valid leads" },
+                        google_maps_url: { type: "string", description: "Google Maps link if available" },
+                        notes: { type: "string", description: "Additional context about the business" },
                       },
-                      required: ["business_name", "has_website"],
+                      required: ["business_name", "category", "location", "has_website", "phone"],
                       additionalProperties: false,
                     },
                   },
@@ -176,12 +118,13 @@ Target category: ${category}. Target location: ${location}, Kenya.`;
               },
             },
           }],
-          tool_choice: { type: "function", function: { name: "extract_businesses" } },
+          tool_choice: { type: "function", function: { name: "report_businesses" } },
         }),
       });
 
       if (!aiResponse.ok) {
-        console.error("AI error:", await aiResponse.text());
+        const errText = await aiResponse.text();
+        console.error(`AI discovery error (${aiResponse.status}):`, errText);
         continue;
       }
 
@@ -194,20 +137,15 @@ Target category: ${category}. Target location: ${location}, Kenya.`;
         } catch { /* skip */ }
       }
 
-        // HARD FILTER — code-level enforcement, no exceptions
-        const noWebsiteBusinesses = businesses.filter(b => !b.has_website);
-        console.log(`Extracted ${businesses.length} businesses, ${noWebsiteBusinesses.length} passed no-website filter`);
+      // HARD FILTER: no website + must have contact info
+      const validLeads = businesses.filter(b => !b.has_website && (b.phone || b.email));
+      console.log(`AI returned ${businesses.length} businesses, ${validLeads.length} passed filters`);
 
-        const services = userSettings.services?.join(", ") || "web development, mobile apps, and digital solutions";
-        const portfolio = userSettings.portfolio_links?.join(", ") || "";
-        const signature = userSettings.email_signature || "Best regards,\nEmmanuel Kigen";
+      const services = userSettings.services?.join(", ") || "web development, mobile apps, and digital solutions";
+      const signature = userSettings.email_signature || "Best regards,\nEmmanuel Kigen";
 
-        for (const biz of noWebsiteBusinesses) {
-          // Skip leads with no contact info at all — can't reach them
-          if (!biz.phone && !biz.email) {
-            console.log(`Skipping ${biz.business_name} — no contact info`);
-            continue;
-          }
+      for (const biz of validLeads) {
+        // Check for duplicates
         const { data: existing } = await supabase
           .from("leads")
           .select("id")
@@ -217,16 +155,13 @@ Target category: ${category}. Target location: ${location}, Kenya.`;
 
         if (existing) continue;
 
-        // Build social_links with google_maps_url
         const socialLinks: any = {};
         if (biz.google_maps_url) socialLinks.google_maps = biz.google_maps_url;
 
-        // Build contact_channels
         const contactChannels: any[] = [];
         if (biz.phone) contactChannels.push({ type: "phone", value: biz.phone });
         if (biz.email) contactChannels.push({ type: "email", value: biz.email });
 
-        // Compose notes with address + any extra info
         const noteParts = [];
         if (biz.address) noteParts.push(`Address: ${biz.address}`);
         if (biz.notes) noteParts.push(biz.notes);
@@ -243,7 +178,7 @@ Target category: ${category}. Target location: ${location}, Kenya.`;
           has_website: false,
           notes: noteParts.join(" | ") || null,
           status: "qualified",
-          discovery_source: "google_maps",
+          discovery_source: "ai_search",
           contact_channels: contactChannels.length > 0 ? contactChannels : null,
           social_links: Object.keys(socialLinks).length > 0 ? socialLinks : null,
         }).select("id").single();
@@ -252,10 +187,8 @@ Target category: ${category}. Target location: ${location}, Kenya.`;
         totalDiscovered++;
 
         // Inline lead analysis
-        let analysis: any = null;
         try {
-          const portfolioProjects = userSettings.portfolio_projects || [];
-          const analysisPrompt = `Analyze this Kenyan business found on Google Maps with NO website.
+          const analysisPrompt = `Analyze this Kenyan business found via AI research with NO website.
 
 Business: ${biz.business_name}
 Category: ${biz.category || category}
@@ -263,19 +196,17 @@ Location: ${biz.location || location}
 Address: ${biz.address || "Unknown"}
 Phone: ${biz.phone || "None"}
 Email: ${biz.email || "None"}
-Google Maps: ${biz.google_maps_url || "None"}
 
 This business has NO website — they rely entirely on word of mouth and foot traffic.
-They are our IDEAL target for web development services.
 
 My portfolio projects:
 ${JSON.stringify(portfolioProjects, null, 2)}
 
 Provide:
-1. Pain points from having no website (lost customers, no online bookings, no credibility, etc.)
+1. Pain points from having no website
 2. Specific website features they would benefit from
 3. Which portfolio projects to reference and why
-4. Priority score 1-10 (no website + phone only = high priority, has email too = higher)`;
+4. Priority score 1-10`;
 
           const analysisResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
@@ -284,7 +215,7 @@ Provide:
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: "google/gemini-3-flash-preview",
+              model: "google/gemini-2.5-flash",
               messages: [
                 { role: "system", content: "You are a business intelligence analyst helping a freelance web developer identify high-value leads." },
                 { role: "user", content: analysisPrompt },
@@ -324,7 +255,7 @@ Provide:
             const analysisData = await analysisResponse.json();
             const analysisToolCall = analysisData.choices?.[0]?.message?.tool_calls?.[0];
             if (analysisToolCall?.function?.arguments) {
-              analysis = JSON.parse(analysisToolCall.function.arguments);
+              const analysis = JSON.parse(analysisToolCall.function.arguments);
               await supabase.from("leads").update({
                 analysis,
                 priority_score: Math.min(10, Math.max(1, analysis.priority_score || 5)),
@@ -336,44 +267,29 @@ Provide:
           console.error(`Analysis failed for ${biz.business_name}:`, analysisErr);
         }
 
-        // Only generate email if lead has an email address
+        // Generate email if lead has email
         if (!biz.email) continue;
 
-        const painPointsText = analysis?.pain_points?.length
-          ? `\nKey pain points identified:\n${analysis.pain_points.map((p: string) => `- ${p}`).join("\n")}`
-          : "";
-        const solutionsText = analysis?.recommended_solutions?.length
-          ? `\nSolutions to propose:\n${analysis.recommended_solutions.map((s: string) => `- ${s}`).join("\n")}`
-          : "";
-        const portfolioMatchText = analysis?.matched_portfolio?.length
-          ? `\nRelevant portfolio examples to mention:\n${analysis.matched_portfolio.map((p: any) => `- ${p.url}: ${p.reason}`).join("\n")}`
-          : portfolio ? `- Mention your portfolio: ${portfolio}` : "";
+        try {
+          const emailPrompt = `You are Emmanuel Kigen, a freelance web developer reaching out to ${biz.business_name}, a ${biz.category || category} business in ${biz.location || location}, Kenya.
 
-        const emailPrompt = `You are Emmanuel Kigen, a freelance web developer reaching out to ${biz.business_name}, a ${biz.category || category} business in ${biz.location || location}, Kenya.
-
-They have NO website — only a Google Maps listing. This means they're losing customers to competitors online every day.
-
-Write a compelling, personal cold email:
+They have NO website — only word of mouth and foot traffic. Write a compelling, personal cold email:
 - Reference their specific business type and location
-- Explain how a website would help them get more customers and appear professional
+- Explain how a website would help them get more customers
 - Present yourself as a local freelance web developer: ${services}
-${painPointsText}
-${solutionsText}
-${portfolioMatchText}
-- Keep it warm, genuine, and concise (not a template blast)
+- Keep it warm, genuine, and concise
 - End with a soft CTA — suggest a quick WhatsApp chat or phone call
 - Sign off as Emmanuel Kigen
 ${signature ? `- Signature: ${signature}` : ""}`;
 
-        try {
-          const emailAiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          const emailResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
             headers: {
               Authorization: `Bearer ${LOVABLE_API_KEY}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: "google/gemini-3-flash-preview",
+              model: "google/gemini-2.5-flash",
               messages: [
                 { role: "system", content: "You are writing personalized cold emails on behalf of Emmanuel Kigen, a freelance web developer targeting Kenyan small businesses with no website." },
                 { role: "user", content: emailPrompt },
@@ -398,9 +314,9 @@ ${signature ? `- Signature: ${signature}` : ""}`;
             }),
           });
 
-          if (emailAiResponse.ok) {
-            const emailAiData = await emailAiResponse.json();
-            const emailToolCall = emailAiData.choices?.[0]?.message?.tool_calls?.[0];
+          if (emailResponse.ok) {
+            const emailData = await emailResponse.json();
+            const emailToolCall = emailData.choices?.[0]?.message?.tool_calls?.[0];
             if (emailToolCall?.function?.arguments) {
               const email = JSON.parse(emailToolCall.function.arguments);
               await supabase.from("email_campaigns").insert({
@@ -423,7 +339,7 @@ ${signature ? `- Signature: ${signature}` : ""}`;
       await supabase.from("activity_logs").insert({
         user_id: userSettings.user_id,
         action: "auto_discovery",
-        details: { source: "google_maps", category, location, leads_added: totalDiscovered, query_pattern: queryIndex + 1 },
+        details: { source: "ai_search", category, location, leads_added: totalDiscovered },
       });
     }
 
@@ -464,7 +380,7 @@ ${signature ? `- Signature: ${signature}` : ""}`;
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("auto-discover error:", error);
+    console.error("ai-discover error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

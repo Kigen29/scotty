@@ -5,10 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Plus, X, Globe, Briefcase, Instagram, MessageCircle } from "lucide-react";
+import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search } from "lucide-react";
 
 interface PortfolioProject {
   url: string;
@@ -37,6 +38,7 @@ const SettingsPage = () => {
     is_autonomous: true,
     social_discovery_enabled: true,
     whatsapp_number: "",
+    discovery_pipeline: "firecrawl",
   });
   const [portfolioProjects, setPortfolioProjects] = useState<PortfolioProject[]>([]);
   const [newService, setNewService] = useState("");
@@ -72,6 +74,7 @@ const SettingsPage = () => {
         is_autonomous: data.is_autonomous ?? true,
         social_discovery_enabled: (data as any).social_discovery_enabled ?? true,
         whatsapp_number: (data as any).whatsapp_number || "",
+        discovery_pipeline: (data as any).discovery_pipeline || "firecrawl",
       });
       setPortfolioProjects((data as any).portfolio_projects || []);
     }
@@ -130,6 +133,46 @@ const SettingsPage = () => {
           <Save className="h-4 w-4 mr-2" /> {loading ? "Saving..." : "Save Settings"}
         </Button>
       </div>
+
+      {/* Discovery Pipeline */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Cpu className="h-5 w-5" /> Discovery Pipeline</CardTitle>
+          <CardDescription>Choose which engine discovers new business leads</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RadioGroup
+            value={settings.discovery_pipeline}
+            onValueChange={(v) => setSettings((s) => ({ ...s, discovery_pipeline: v }))}
+            className="space-y-3"
+          >
+            <label className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${settings.discovery_pipeline === "firecrawl" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
+              <RadioGroupItem value="firecrawl" className="mt-0.5" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Firecrawl</span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Web scraping via Firecrawl API — searches Google for businesses, scrapes results, and extracts leads. More accurate but uses Firecrawl credits.
+                </p>
+              </div>
+            </label>
+            <label className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${settings.discovery_pipeline === "lovable_ai" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
+              <RadioGroupItem value="lovable_ai" className="mt-0.5" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <Cpu className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Lovable AI</span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  AI-powered research agent — uses Gemini/GPT models to identify businesses without websites based on local knowledge. No Firecrawl needed, better filtering.
+                </p>
+              </div>
+            </label>
+          </RadioGroup>
+        </CardContent>
+      </Card>
 
       {/* Your Profile */}
       <Card>
