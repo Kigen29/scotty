@@ -68,6 +68,16 @@ Generate 5-8 realistic business leads that match this profile. For each business
 - If you know of actual businesses fitting this profile, include them
 - Only include businesses you're reasonably confident do NOT have a website
 
+**CRITICAL: EMAIL ADDRESSES ARE THE MOST IMPORTANT FIELD.** You MUST try to find or infer email addresses for every business. Check:
+- Google Business Profile listings (many have email)
+- Facebook business pages (often list contact email)
+- Kenya business directories (e.g., Yellow Pages Kenya, Kenya Business Directory)
+- Common patterns: info@businessname.com, businessname@gmail.com, ownername@gmail.com
+- If the business has a Facebook or Instagram page, the contact info often includes email
+- Even if you have to guess a likely Gmail address based on the business name, include it
+
+Businesses with email addresses are 10x more valuable than those without. Prioritize finding businesses that have publicly listed email addresses.
+
 IMPORTANT: Do NOT invent businesses that are likely to have websites. Skip chains, franchises, and large establishments.`;
 
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
