@@ -1,113 +1,117 @@
 
 
-## Plan: UI Overhaul, Bug Fixes, and Discovery Improvements
+## Implementation Plan: OpenAI Pipeline, Portfolio Projects, Cron Jobs, and Data Cleanup
 
-This is a significant UI and functionality upgrade across the entire app, inspired by Instantly.ai's clean dashboard aesthetic and Agentible's dark professional feel.
-
----
-
-### 1. Fix Blocked Links (Google Maps, Instagram, TikTok)
-
-**Problem**: The preview iframe blocks `google.com`, `instagram.com`, `tiktok.com` due to `X-Frame-Options` / CSP headers. Links with `target="_blank"` inside an iframe still get blocked.
-
-**Fix**: Replace `<a href>` links with `window.open()` via button `onClick` handlers. This bypasses iframe embedding restrictions since it opens a new browser tab directly.
-
-**Files**: `src/pages/LeadDiscovery.tsx`
+This plan covers all four requested changes in one go.
 
 ---
 
-### 2. Add "Football Pitches / Turfs" Category
+### 1. Add Discovery Pipeline Toggle to Settings
 
-Add `"football pitches"` to the categories array in `LeadDiscovery.tsx` and to the default `target_categories` in `SettingsPage.tsx`.
+**Database migration** -- Add a `discovery_pipeline` column to the `settings` table:
 
----
+```sql
+ALTER TABLE settings ADD COLUMN discovery_pipeline text DEFAULT 'firecrawl';
+```
 
-### 3. Prioritize Leads with Email Addresses
+**Settings UI** (`src/pages/SettingsPage.tsx`) -- Add a new "Discovery Pipeline" card with two radio-style options:
+- **Firecrawl** (current default) -- Uses web scraping via Firecrawl API
+- **Lovable AI** -- Uses Lovable AI gateway (OpenAI/Gemini models) with web search tool calling to find businesses directly, no Firecrawl needed
 
-Update `supabase/functions/ai-discover/index.ts`:
-- Modify the AI prompt to **strongly emphasize finding business email addresses** (e.g., from Google Business Profiles, Facebook pages, directory listings)
-- Add email as a required field in the tool schema (change from optional to strongly requested)
-- Add sorting logic: leads with emails get higher priority scores (+2 boost)
-
----
-
-### 4. Lead Discovery Page -- Table View with Filters
-
-Replace the current card grid with a professional **data table** layout inspired by Instantly.ai's leads view:
-
-- **Top bar**: Search input, category dropdown, location dropdown, status dropdown, source dropdown, "Has Email" toggle -- all inline
-- **Stats row**: Small stat badges showing totals (e.g., "91 leads · 45 with email · 23 qualified")
-- **Data table** using the existing `Table` component:
-  - Columns: Checkbox, Business Name, Category, Location, Phone, Email, Source, Status, Priority, Actions
-  - Sortable columns (click header to sort)
-  - Row click opens a slide-out detail panel (Sheet) with full lead info, analysis, and action buttons
-  - Bulk actions bar: Approve Selected, Dismiss Selected, Generate Emails
-- **Pagination** at the bottom
-- Keep the "Discover Leads" search card at top but more compact
-
-**Files**: `src/pages/LeadDiscovery.tsx` (full rewrite)
+The toggle saves to the `discovery_pipeline` column. The settings state gets a new `discovery_pipeline` field.
 
 ---
 
-### 5. Dashboard -- Instantly.ai-Inspired Analytics
+### 2. Create the Lovable AI Discovery Pipeline
 
-Redesign the Dashboard with:
+**New edge function**: `supabase/functions/ai-discover/index.ts`
 
-- **Hero stats row**: 4 cards with large numbers, subtle icons, and trend indicators (like Instantly's "CONTACTED 1770", "OPENED 338", "POSITIVE 13" cards)
-- **Pipeline funnel**: Horizontal progress bar visualization instead of the current box layout
-- **Area chart**: Replace the bar chart with a stacked area chart (like Instantly's analytics view) showing discovered/contacted/responded over time using Recharts `AreaChart`
-- **Hot leads**: Table format instead of list cards
-- **Recent activity**: Cleaner timeline with icons and relative timestamps
+This function replaces Firecrawl's search with the Lovable AI gateway. The approach:
 
-**Files**: `src/pages/Dashboard.tsx` (rewrite), `src/pages/Reports.tsx` (rewrite)
+1. Read user settings (categories, locations, portfolio projects)
+2. Pick a random category + location
+3. Call the Lovable AI gateway with a detailed prompt asking the model to **act as a research agent** and identify real Kenyan businesses in that category/location that have NO website -- only Google Maps listings, social pages, or directory entries
+4. Use tool calling to extract structured business data (name, phone, email, Google Maps URL, address, category, location, has_website)
+5. Apply the same hard filters: `!has_website` and must have phone or email
+6. Insert into `leads` table with `discovery_source: 'ai_search'`
+7. Run inline analysis + email generation (same logic as auto-discover)
+8. Chain to social-discover and daily-outreach
 
----
+The key prompt instructs the AI to think like a local business researcher who would search Google Maps for businesses in specific Kenyan towns that only have a Google listing and no website.
 
-### 6. Reports Page -- Professional Analytics
+**Update `auto-discover/index.ts`** -- At the start, read `discovery_pipeline` from settings. If it's `'lovable_ai'`, call `ai-discover` instead and return. If `'firecrawl'` (default), continue with existing logic.
 
-- **KPI cards** with sparkline mini-charts
-- **Conversion funnel** as a horizontal bar with percentages
-- **Campaign performance table** showing each campaign's open/reply rates
-- **Leads by category** as a horizontal bar chart instead of grid boxes
-- **Export** button kept
-
-**Files**: `src/pages/Reports.tsx`
+This keeps a single entry point (`auto-discover`) that routes to the right pipeline based on settings, so cron jobs don't need to change.
 
 ---
 
-### 7. Campaigns Page -- Table Layout
+### 3. Pre-populate Portfolio Projects
 
-Switch from card list to a proper data table:
-- Columns: Subject, Lead, Channel, Status, Template, Date, Actions
-- Inline send/copy buttons
-- Better modal for email preview
+**SQL insert** (using insert tool, not migration) -- After the user's settings row exists, update it with the four portfolio projects:
 
-**Files**: `src/pages/Campaigns.tsx`
+```sql
+UPDATE settings SET portfolio_projects = '[
+  {"url": "https://heartbeatsafaris.com", "industry": "Tourism & Travel", "features": "Safari booking, payment integration, mobile responsive, tour packages", "problem_solved": "Enabled online safari bookings, expanding reach to international tourists"},
+  {"url": "https://rangautiles.com", "industry": "Construction & Building Materials", "features": "Product catalog, quote requests, delivery tracking", "problem_solved": "Moved from word-of-mouth to online presence, increasing B2B orders"},
+  {"url": "https://lakevictoriaaquaculture.com", "industry": "Agriculture & Aquaculture", "features": "Product showcase, ordering system, company profile", "problem_solved": "Professional online presence connecting fish farmers to buyers across East Africa"},
+  {"url": "https://itchyfeet.co.ke", "industry": "Tourism & Travel", "features": "Trip planning, booking integration, blog, mobile responsive", "problem_solved": "Centralized travel services online, increasing direct bookings by reducing reliance on third parties"}
+]'::jsonb
+WHERE user_id = (SELECT user_id FROM settings LIMIT 1);
+```
 
----
-
-### 8. Global UI Polish
-
-- Tighten spacing, use consistent card borders with subtle shadows
-- Add smooth transitions on hover states
-- Make the sidebar more compact with smaller icons
-- Add a top header bar with page breadcrumbs and user avatar
-
-**Files**: `src/components/AppLayout.tsx`, `src/index.css`
+This will be done via the insert tool so it only affects existing data.
 
 ---
 
-### Files to Modify
+### 4. Set Up Automated Cron Jobs
+
+**SQL insert** (using insert tool) -- Create two cron jobs using `pg_cron` and `pg_net`:
+
+- **auto-discover**: Runs every 6 hours (`0 */6 * * *`)
+- **daily-outreach**: Runs every 2 hours during business hours (`0 8,10,12,14,16 * * *`)
+
+Both call the respective edge function URLs with the anon key.
+
+---
+
+### 5. Clean Up Bad Leads
+
+**SQL delete** (using insert tool):
+
+```sql
+DELETE FROM leads WHERE has_website = true;
+DELETE FROM leads WHERE phone IS NULL AND email IS NULL;
+```
+
+Also delete any orphaned email_campaigns referencing those leads.
+
+---
+
+### Files to Create/Modify
 
 | File | Change |
 |---|---|
-| `src/pages/LeadDiscovery.tsx` | Table view with filters, fix blocked links |
-| `src/pages/Dashboard.tsx` | Instantly-style analytics |
-| `src/pages/Reports.tsx` | Professional charts and tables |
-| `src/pages/Campaigns.tsx` | Table layout |
-| `src/components/AppLayout.tsx` | Header bar, compact sidebar |
-| `src/index.css` | UI polish tweaks |
-| `supabase/functions/ai-discover/index.ts` | Email prioritization in prompts |
+| `supabase/functions/ai-discover/index.ts` | **New** -- Lovable AI-powered discovery pipeline |
+| `supabase/functions/auto-discover/index.ts` | Add pipeline routing logic at the top |
+| `src/pages/SettingsPage.tsx` | Add discovery pipeline toggle card + load/save the new field |
+| `supabase/config.toml` | Add `[functions.ai-discover]` entry |
+| Database | Add `discovery_pipeline` column, insert portfolio projects, create cron jobs, delete bad leads |
 
-This is a large UI overhaul. I recommend implementing it in 2-3 rounds: first the Lead Discovery table + bug fixes, then Dashboard/Reports, then Campaigns polish.
+---
+
+### Technical Details
+
+**The AI discovery prompt** will ask the model to generate realistic business leads based on its knowledge of Kenyan small businesses, structured via tool calling. This is fundamentally different from Firecrawl -- instead of scraping search results, the AI uses its training data to identify likely businesses in specific categories and locations. The trade-off is that the AI may hallucinate business names, but the phone/email contact requirement and the Google Maps link on each card let you verify quickly.
+
+**Pipeline routing** in `auto-discover` will look like:
+
+```typescript
+const pipeline = userSettings.discovery_pipeline || 'firecrawl';
+if (pipeline === 'lovable_ai') {
+  // Call ai-discover function instead
+  await fetch(`${SUPABASE_URL}/functions/v1/ai-discover`, { ... });
+  continue; // Skip firecrawl logic for this user
+}
+// ... existing firecrawl logic
+```
 

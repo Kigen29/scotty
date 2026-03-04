@@ -3,37 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Users, Mail, MessageSquare, TrendingUp, Eye, XCircle, CheckCircle2, Search, Send, Zap, RefreshCw, Flame, Star } from "lucide-react";
-import { DateFilter, type DateRange } from "@/components/DateFilter";
-
-const activityLabels: Record<string, { label: string; icon: React.ReactNode }> = {
-  leads_discovered: { label: "Discovered leads", icon: <Search className="h-3.5 w-3.5" /> },
-  auto_discovery: { label: "Auto-discovered leads", icon: <Zap className="h-3.5 w-3.5" /> },
-  email_generated: { label: "Email drafted", icon: <Mail className="h-3.5 w-3.5" /> },
-  email_sent: { label: "Email sent", icon: <Send className="h-3.5 w-3.5" /> },
-  auto_email_sent: { label: "Auto-sent email", icon: <Send className="h-3.5 w-3.5" /> },
-  follow_up_generated: { label: "Follow-up drafted", icon: <RefreshCw className="h-3.5 w-3.5" /> },
-  response_classified: { label: "Response classified", icon: <MessageSquare className="h-3.5 w-3.5" /> },
-};
-
-const formatDetails = (action: string, details: any): string => {
-  if (!details || typeof details !== "object") return "";
-  switch (action) {
-    case "leads_discovered":
-    case "auto_discovery":
-      return `${details.leads_added || 0} new ${details.category || ""} leads in ${details.location || "Kenya"}`;
-    case "email_generated":
-    case "follow_up_generated":
-      return `${details.business_name || "Business"} — ${details.template || details.template_type || "email"}`;
-    case "email_sent":
-    case "auto_email_sent":
-      return `To ${details.business_name || details.to || "lead"}`;
-    case "response_classified":
-      return `${details.business_name || "Lead"} — ${details.classification || ""}`;
-    default:
-      return JSON.stringify(details);
-  }
-};
+import { Users, Mail, MessageSquare, TrendingUp, Flame, Star, Zap, Send } from "lucide-react";
+import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -42,16 +14,15 @@ const Dashboard = () => {
   });
   const [activities, setActivities] = useState<any[]>([]);
   const [hotLeads, setHotLeads] = useState<any[]>([]);
-  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [chartData, setChartData] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) return;
-
-    const fetchStats = async () => {
+    const fetchAll = async () => {
       const [{ data: leads }, { data: emails }, { data: logs }] = await Promise.all([
         supabase.from("leads").select("*").eq("user_id", user.id),
-        supabase.from("email_campaigns").select("status").eq("user_id", user.id),
-        supabase.from("activity_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20),
+        supabase.from("email_campaigns").select("*").eq("user_id", user.id),
+        supabase.from("activity_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(15),
       ]);
 
       if (leads) {
@@ -67,144 +38,202 @@ const Dashboard = () => {
           drafts: emails?.filter((e) => e.status === "draft").length || 0,
           responseRate: contacted > 0 ? Math.round((responded / contacted) * 100) : 0,
         });
+        setHotLeads(
+          leads.filter((l: any) => l.status === "interested" || (l.priority_score && l.priority_score >= 8))
+            .sort((a: any, b: any) => (b.priority_score || 0) - (a.priority_score || 0))
+            .slice(0, 5)
+        );
 
-        const hot = leads
-          .filter((l: any) => l.status === "interested" || (l.priority_score && l.priority_score >= 8))
-          .sort((a: any, b: any) => (b.priority_score || 0) - (a.priority_score || 0))
-          .slice(0, 5);
-        setHotLeads(hot);
+        // Build 7-day chart
+        const now = new Date();
+        const days = Array.from({ length: 7 }).map((_, i) => {
+          const d = new Date(now.getTime() - (6 - i) * 86400000);
+          const dayStr = d.toISOString().split("T")[0];
+          return {
+            day: d.toLocaleDateString("en", { weekday: "short" }),
+            discovered: leads.filter((l) => l.created_at?.startsWith(dayStr)).length,
+            contacted: leads.filter((l) => l.status === "contacted" && l.updated_at?.startsWith(dayStr)).length,
+            emails: emails?.filter((e) => e.sent_at?.startsWith(dayStr)).length || 0,
+          };
+        });
+        setChartData(days);
       }
-
       if (logs) setActivities(logs);
     };
-
-    fetchStats();
+    fetchAll();
   }, [user]);
 
-  // Filter activities by date
-  const filteredActivities = dateRange
-    ? activities.filter((a) => {
-        const d = new Date(a.created_at);
-        return d >= dateRange.from && d <= dateRange.to;
-      })
-    : activities;
-
   const metricCards = [
-    { label: "Total Leads", value: stats.totalLeads, icon: Users, color: "text-primary" },
-    { label: "Emails Sent", value: stats.emailsSent, icon: Mail, color: "text-blue-500 dark:text-blue-400", sub: `${stats.drafts} drafts` },
-    { label: "Response Rate", value: `${stats.responseRate}%`, icon: MessageSquare, color: "text-amber-500 dark:text-amber-400" },
-    { label: "Interested", value: stats.interested, icon: TrendingUp, color: "text-emerald-500 dark:text-emerald-400" },
+    { label: "TOTAL LEADS", value: stats.totalLeads, icon: Users, accent: "text-primary" },
+    { label: "EMAILS SENT", value: stats.emailsSent, icon: Send, accent: "text-blue-500", sub: `${stats.drafts} drafts` },
+    { label: "RESPONSE RATE", value: `${stats.responseRate}%`, icon: MessageSquare, accent: "text-amber-500" },
+    { label: "INTERESTED", value: stats.interested, icon: TrendingUp, accent: "text-emerald-500" },
   ];
 
+  // Pipeline data
+  const pipeline = [
+    { label: "Discovered", count: stats.totalLeads, color: "bg-muted-foreground" },
+    { label: "Qualified", count: stats.qualified, color: "bg-blue-500" },
+    { label: "Contacted", count: stats.contacted, color: "bg-amber-500" },
+    { label: "Responded", count: stats.responded, color: "bg-primary" },
+    { label: "Interested", count: stats.interested, color: "bg-emerald-500" },
+  ];
+  const maxPipeline = Math.max(...pipeline.map((p) => p.count), 1);
+
+  const relativeTime = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  };
+
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Your lead generation pipeline at a glance</p>
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <p className="text-sm text-muted-foreground">Your lead generation pipeline at a glance</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Hero Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {metricCards.map((card) => (
-          <Card key={card.label}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
+          <Card key={card.label} className="relative overflow-hidden">
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">{card.label}</p>
+                  <p className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{card.label}</p>
                   <p className="text-3xl font-bold mt-1">{card.value}</p>
-                  {"sub" in card && card.sub && <p className="text-xs text-muted-foreground mt-0.5">{card.sub}</p>}
+                  {card.sub && <p className="text-xs text-muted-foreground mt-0.5">{card.sub}</p>}
                 </div>
-                <card.icon className={`h-8 w-8 ${card.color} opacity-80`} />
+                <div className={`p-2 rounded-lg bg-muted ${card.accent}`}>
+                  <card.icon className="h-5 w-5" />
+                </div>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
+      {/* Pipeline funnel */}
       <Card>
-        <CardHeader><CardTitle>Pipeline Overview</CardTitle></CardHeader>
+        <CardHeader className="pb-3"><CardTitle className="text-base">Pipeline</CardTitle></CardHeader>
         <CardContent>
-          <div className="flex items-center gap-4 flex-wrap">
-            {[
-              { label: "Discovered", count: stats.totalLeads, icon: Eye },
-              { label: "Qualified", count: stats.qualified, icon: CheckCircle2 },
-              { label: "Contacted", count: stats.contacted, icon: Mail },
-              { label: "Responded", count: stats.responded, icon: MessageSquare },
-              { label: "Interested", count: stats.interested, icon: TrendingUp },
-              { label: "Not Interested", count: stats.notInterested, icon: XCircle },
-            ].map((stage, i, arr) => (
-              <div key={stage.label} className="flex items-center gap-2">
-                <div className="flex flex-col items-center p-4 rounded-lg bg-muted min-w-[100px]">
-                  <stage.icon className="h-5 w-5 text-muted-foreground mb-1" />
-                  <span className="text-2xl font-bold">{stage.count}</span>
-                  <span className="text-xs text-muted-foreground">{stage.label}</span>
+          <div className="space-y-2.5">
+            {pipeline.map((stage) => (
+              <div key={stage.label} className="flex items-center gap-3">
+                <span className="text-xs w-20 text-muted-foreground text-right">{stage.label}</span>
+                <div className="flex-1 h-7 bg-muted rounded-md overflow-hidden">
+                  <div
+                    className={`h-full ${stage.color} rounded-md flex items-center px-2.5 transition-all duration-500`}
+                    style={{ width: `${Math.max((stage.count / maxPipeline) * 100, 3)}%` }}
+                  >
+                    <span className="text-[11px] font-semibold text-white">{stage.count}</span>
+                  </div>
                 </div>
-                {i < arr.length - 1 && <span className="text-muted-foreground text-lg">→</span>}
               </div>
             ))}
           </div>
         </CardContent>
       </Card>
 
-      {hotLeads.length > 0 && (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Area Chart */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Flame className="h-5 w-5 text-orange-500" /> Hot Leads
+          <CardHeader className="pb-3"><CardTitle className="text-base">7-Day Activity</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="gradDiscovered" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gradEmails" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(220 80% 55%)" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="hsl(220 80% 55%)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="day" className="text-xs fill-muted-foreground" tick={{ fontSize: 11 }} />
+                <YAxis className="text-xs fill-muted-foreground" tick={{ fontSize: 11 }} />
+                <RechartsTooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: 12 }} />
+                <Area type="monotone" dataKey="discovered" name="Discovered" stroke="hsl(var(--primary))" fill="url(#gradDiscovered)" strokeWidth={2} />
+                <Area type="monotone" dataKey="emails" name="Emails" stroke="hsl(220 80% 55%)" fill="url(#gradEmails)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Hot Leads Table */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Flame className="h-4 w-4 text-orange-500" /> Hot Leads
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {hotLeads.map((lead: any) => (
-                <div key={lead.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <p className="font-medium text-sm">{lead.business_name}</p>
-                      <p className="text-xs text-muted-foreground">{lead.category} • {lead.location}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className={`text-xs border-0 ${lead.status === "interested" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"}`}>
-                      {lead.status === "interested" ? "Interested" : "High Priority"}
-                    </Badge>
-                    <div className="flex items-center gap-0.5">
-                      <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
-                      <span className="text-xs font-medium">{lead.priority_score || 5}/10</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {hotLeads.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No hot leads yet</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">Business</TableHead>
+                    <TableHead className="text-xs">Location</TableHead>
+                    <TableHead className="text-xs">Status</TableHead>
+                    <TableHead className="text-xs">Score</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {hotLeads.map((lead: any) => (
+                    <TableRow key={lead.id}>
+                      <TableCell className="text-sm font-medium">{lead.business_name}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{lead.location}</TableCell>
+                      <TableCell>
+                        <Badge className="text-[10px] border-0 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                          {lead.status === "interested" ? "Interested" : "High Priority"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-0.5">
+                          <Star className="h-3 w-3 text-amber-500 fill-amber-500" />
+                          <span className="text-xs">{lead.priority_score || 5}</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
-      )}
+      </div>
 
+      {/* Recent Activity */}
       <Card>
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-        </CardHeader>
+        <CardHeader className="pb-3"><CardTitle className="text-base">Recent Activity</CardTitle></CardHeader>
         <CardContent>
-          <DateFilter defaultPreset="all" onChange={setDateRange} />
-          {filteredActivities.length === 0 ? (
-            <p className="text-muted-foreground text-sm py-8 text-center">No activity yet. Start by discovering leads!</p>
+          {activities.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">No activity yet</p>
           ) : (
-            <div className="space-y-2 mt-4">
-              {filteredActivities.map((activity) => {
-                const info = activityLabels[activity.action] || { label: activity.action, icon: null };
-                return (
-                  <div key={activity.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {info.icon}
-                      <Badge variant="outline" className="text-xs">{info.label}</Badge>
-                    </div>
-                    <span className="text-sm flex-1 text-muted-foreground truncate">
-                      {formatDetails(activity.action, activity.details)}
-                    </span>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {new Date(activity.created_at).toLocaleString()}
-                    </span>
+            <div className="space-y-1.5">
+              {activities.map((a) => (
+                <div key={a.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors">
+                  <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                    <Zap className="h-3.5 w-3.5 text-muted-foreground" />
                   </div>
-                );
-              })}
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm">{a.action?.replace(/_/g, " ")}</span>
+                    {a.details?.business_name && (
+                      <span className="text-xs text-muted-foreground ml-1.5">— {a.details.business_name}</span>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0">{relativeTime(a.created_at)}</span>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
