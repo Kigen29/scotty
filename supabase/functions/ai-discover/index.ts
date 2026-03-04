@@ -266,11 +266,14 @@ Provide:
             const analysisToolCall = analysisData.choices?.[0]?.message?.tool_calls?.[0];
             if (analysisToolCall?.function?.arguments) {
               const analysis = JSON.parse(analysisToolCall.function.arguments);
+              // Boost priority for leads with email (+2)
+              const baseScore = analysis.priority_score || 5;
+              const boostedScore = biz.email ? Math.min(10, baseScore + 2) : baseScore;
               await supabase.from("leads").update({
                 analysis,
-                priority_score: Math.min(10, Math.max(1, analysis.priority_score || 5)),
+                priority_score: Math.min(10, Math.max(1, boostedScore)),
               }).eq("id", newLead.id);
-              console.log(`Analyzed ${biz.business_name}: score ${analysis.priority_score}`);
+              console.log(`Analyzed ${biz.business_name}: score ${boostedScore}${biz.email ? " (email boost)" : ""}`);
             }
           }
         } catch (analysisErr) {
