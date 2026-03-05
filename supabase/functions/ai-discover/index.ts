@@ -17,8 +17,33 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("Missing LOVABLE_API_KEY");
+    // Accept optional pipeline param from caller (auto-discover)
+    let requestedPipeline = "lovable_ai";
+    try {
+      const body = await req.json();
+      if (body?.pipeline) requestedPipeline = body.pipeline;
+    } catch { /* no body, default to lovable_ai */ }
+
+    // Determine AI endpoint
+    let aiUrl: string;
+    let aiKey: string;
+    let aiModel: string;
+
+    if (requestedPipeline === "openai") {
+      const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+      if (!OPENAI_API_KEY) throw new Error("Missing OPENAI_API_KEY");
+      aiUrl = "https://api.openai.com/v1/chat/completions";
+      aiKey = OPENAI_API_KEY;
+      aiModel = "gpt-4o-mini";
+      console.log("ai-discover using OpenAI pipeline");
+    } else {
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_API_KEY) throw new Error("Missing LOVABLE_API_KEY");
+      aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+      aiKey = LOVABLE_API_KEY;
+      aiModel = "google/gemini-2.5-flash";
+      console.log("ai-discover using Lovable AI pipeline");
+    }
 
     const { data: allSettings } = await supabase
       .from("settings")
@@ -80,14 +105,14 @@ Businesses with email addresses are 10x more valuable than those without. Priori
 
 IMPORTANT: Do NOT invent businesses that are likely to have websites. Skip chains, franchises, and large establishments.`;
 
-      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const aiResponse = await fetch(aiUrl, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          Authorization: `Bearer ${aiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: aiModel,
           messages: [
             {
               role: "system",
@@ -218,14 +243,14 @@ Provide:
 3. Which portfolio projects to reference and why
 4. Priority score 1-10`;
 
-          const analysisResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          const analysisResponse = await fetch(aiUrl, {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              Authorization: `Bearer ${aiKey}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: "google/gemini-2.5-flash",
+              model: aiModel,
               messages: [
                 { role: "system", content: "You are a business intelligence analyst helping a freelance web developer identify high-value leads." },
                 { role: "user", content: analysisPrompt },
@@ -295,14 +320,14 @@ They have NO website — only word of mouth and foot traffic. Write a compelling
 - Sign off as Emmanuel Kigen
 ${signature ? `- Signature: ${signature}` : ""}`;
 
-          const emailResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          const emailResponse = await fetch(aiUrl, {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              Authorization: `Bearer ${aiKey}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: "google/gemini-2.5-flash",
+              model: aiModel,
               messages: [
                 { role: "system", content: "You are writing personalized cold emails on behalf of Emmanuel Kigen, a freelance web developer targeting Kenyan small businesses with no website." },
                 { role: "user", content: emailPrompt },

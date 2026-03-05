@@ -40,8 +40,8 @@ Deno.serve(async (req) => {
     for (const userSettings of allSettings) {
       // Pipeline routing: check if user wants AI discovery instead of Firecrawl
       const pipeline = (userSettings as any).discovery_pipeline || "firecrawl";
-      if (pipeline === "lovable_ai") {
-        console.log(`User ${userSettings.user_id} uses Lovable AI pipeline — delegating to ai-discover`);
+      if (pipeline === "lovable_ai" || pipeline === "openai") {
+        console.log(`User ${userSettings.user_id} uses ${pipeline} pipeline — delegating to ai-discover`);
         try {
           const aiDiscoverUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ai-discover`;
           await fetch(aiDiscoverUrl, {
@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
               "Content-Type": "application/json",
               Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
             },
-            body: JSON.stringify({}),
+            body: JSON.stringify({ pipeline }),
           });
         } catch (e) {
           console.error("Failed to call ai-discover:", e);
