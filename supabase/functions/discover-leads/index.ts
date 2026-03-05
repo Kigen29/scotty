@@ -53,33 +53,44 @@ Deno.serve(async (req) => {
       throw new Error("FIRECRAWL_API_KEY is not configured");
     }
 
-    console.log("Searching with Firecrawl:", searchQuery);
+    console.log("Searching for:", searchQuery);
 
-    // Search for businesses using Firecrawl
-    const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query: searchQuery,
-        limit: 10,
-        lang: "en",
-        country: "ke",
-        scrapeOptions: { formats: ["markdown"] },
-      }),
-    });
+    let results: any[] = [];
+    let usedFirecrawl = false;
 
-    const searchData = await searchResponse.json();
+    // Try Firecrawl first, fallback to AI-only discovery
+    const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
+    if (FIRECRAWL_API_KEY) {
+      try {
+        const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            query: searchQuery,
+            limit: 10,
+            lang: "en",
+            country: "ke",
+            scrapeOptions: { formats: ["markdown"] },
+          }),
+        });
 
-    if (!searchResponse.ok) {
-      console.error("Firecrawl search error:", searchData);
-      throw new Error(searchData.error || "Firecrawl search failed");
+        const searchData = await searchResponse.json();
+        if (searchResponse.ok) {
+          results = searchData.data || [];
+          usedFirecrawl = true;
+          console.log(`Firecrawl found ${results.length} results`);
+        } else {
+          console.warn("Firecrawl failed, falling back to AI discovery:", searchData.error);
+        }
+      } catch (e) {
+        console.warn("Firecrawl request failed, falling back to AI discovery:", e);
+      }
+    } else {
+      console.log("No Firecrawl key, using AI-only discovery");
     }
-
-    const results = searchData.data || [];
-    console.log(`Found ${results.length} search results`);
 
     // Use AI to extract business info from search results
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -87,25 +98,23 @@ Deno.serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const extractionPrompt = `You are analyzing web search results to extract Kenyan business leads.
+    const extractionPrompt = usedFirecrawl
+      ? `You are analyzing web search results to extract Kenyan business leads.
 
 CRITICAL RULES FOR has_website:
-- ONLY set has_website to false if the business has ZERO web presence of its own (no domain, no website at all).
-- If the result URL is the business's OWN domain (e.g. businessname.co.ke, businessname.com), set has_website to TRUE.
-- If the business is found on a directory (Google Maps, Yellow Pages, Facebook page, Jumia, etc.) BUT you can see they also have their own website linked or mentioned, set has_website to TRUE.
-- If the business ONLY appears on directories with NO own website mentioned anywhere, set has_website to false.
-- When in doubt, set has_website to true. We want ACCURACY over volume.
+- ONLY set has_website to false if the business has ZERO web presence of its own.
+- If the result URL is the business's OWN domain, set has_website to TRUE.
+- If the business ONLY appears on directories with NO own website, set has_website to false.
 
 CRITICAL RULES FOR email:
-- EXTRACT every email address you can find in the content, title, or description.
-- Look carefully in the markdown content for patterns like name@domain.com, info@, contact@, etc.
-- Also extract phone numbers — these are very important for leads without email.
+- EXTRACT every email address you can find. Look for patterns like name@domain.com.
+- Also extract phone numbers.
 - If no email is found, set email to an empty string, do NOT make one up.
 
 CRITICAL RULES FOR quality:
 - Skip large chains, franchises, or well-known brands.
-- Only include actual businesses, not the directory pages themselves.
-- Include the business location as specifically as possible (neighborhood, town).
+- Only include actual businesses, not directory pages themselves.
+- Include the business location as specifically as possible.
 
 Search results:
 ${results.map((r: any, i: number) => `
@@ -118,7 +127,25 @@ Content: ${(r.markdown || "").substring(0, 800)}
 
 Extract businesses and return them using the extract_businesses function.
 Category should be: ${category || "general"}.
-Location should default to: ${location || "Kenya"}.`;
+Location should default to: ${location || "Kenya"}.`
+      : `You are a local business researcher specializing in Kenyan small businesses.
+
+Your task: Find REAL small businesses in the category "${category || "general"}" located in "${location || "Kenya"}" that do NOT have their own website.
+
+IMPORTANT RULES:
+- Focus on REAL businesses that exist in Kenya — use your knowledge of Kenyan towns, markets, and business directories.
+- These should be small/medium businesses that would benefit from having a website built for them.
+- Prioritize businesses you'd find on Google Maps listings, Facebook pages, or local directories but that have NO website of their own.
+- EVERY business MUST have either a phone number or email. Prefer businesses with email addresses.
+- For phone numbers, use Kenyan format (+254...).
+- Set has_website to false for all results (we only want businesses without websites).
+- Include 5-8 realistic businesses.
+- Do NOT invent email addresses — only include if you're confident it's real.
+- Include the Google Maps or directory URL as website_url if available.
+
+Extract businesses and return them using the extract_businesses function.
+Category: ${category || "general"}.
+Location: ${location || "Kenya"}.`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
