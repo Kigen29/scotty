@@ -39,65 +39,87 @@ Deno.serve(async (req) => {
 
     const { category, location, query } = await req.json();
 
-    // Build search query for Firecrawl
+    // Fetch user's pipeline setting
+    const { data: userSettings } = await supabase
+      .from("settings")
+      .select("discovery_pipeline")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const pipeline = (userSettings as any)?.discovery_pipeline || "firecrawl";
+    console.log(`User ${userId} pipeline: ${pipeline}`);
+
+    // Build search terms
     const searchTerms = [];
     if (category) searchTerms.push(category);
     if (location) searchTerms.push(location);
     if (query) searchTerms.push(query);
     searchTerms.push("Kenya small business no website local");
-
     const searchQuery = searchTerms.join(" ");
-
-    const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
-    if (!FIRECRAWL_API_KEY) {
-      throw new Error("FIRECRAWL_API_KEY is not configured");
-    }
-
-    console.log("Searching for:", searchQuery);
 
     let results: any[] = [];
     let usedFirecrawl = false;
 
-    // Try Firecrawl first, fallback to AI-only discovery
-    const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
-    if (FIRECRAWL_API_KEY) {
-      try {
-        const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            query: searchQuery,
-            limit: 10,
-            lang: "en",
-            country: "ke",
-            scrapeOptions: { formats: ["markdown"] },
-          }),
-        });
+    // ── FIRECRAWL PIPELINE ──
+    if (pipeline === "firecrawl") {
+      const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
+      if (FIRECRAWL_API_KEY) {
+        try {
+          console.log("Searching Firecrawl for:", searchQuery);
+          const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              query: searchQuery,
+              limit: 10,
+              lang: "en",
+              country: "ke",
+              scrapeOptions: { formats: ["markdown"] },
+            }),
+          });
 
-        const searchData = await searchResponse.json();
-        if (searchResponse.ok) {
-          results = searchData.data || [];
-          usedFirecrawl = true;
-          console.log(`Firecrawl found ${results.length} results`);
-        } else {
-          console.warn("Firecrawl failed, falling back to AI discovery:", searchData.error);
+          const searchData = await searchResponse.json();
+          if (searchResponse.ok) {
+            results = searchData.data || [];
+            usedFirecrawl = true;
+            console.log(`Firecrawl found ${results.length} results`);
+          } else {
+            console.warn("Firecrawl failed, falling back to AI:", searchData.error);
+          }
+        } catch (e) {
+          console.warn("Firecrawl request failed, falling back to AI:", e);
         }
-      } catch (e) {
-        console.warn("Firecrawl request failed, falling back to AI discovery:", e);
+      } else {
+        console.warn("No FIRECRAWL_API_KEY, falling back to AI");
       }
+    }
+
+    // Determine AI endpoint + key based on pipeline
+    let aiUrl: string;
+    let aiKey: string;
+    let aiModel: string;
+
+    if (pipeline === "openai") {
+      const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+      if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured. Add it in Settings.");
+      aiUrl = "https://api.openai.com/v1/chat/completions";
+      aiKey = OPENAI_API_KEY;
+      aiModel = "gpt-4o-mini";
+      console.log("Using OpenAI pipeline (gpt-4o-mini)");
     } else {
-      console.log("No Firecrawl key, using AI-only discovery");
+      // lovable_ai or firecrawl (firecrawl uses Lovable AI for extraction)
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+      aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+      aiKey = LOVABLE_API_KEY;
+      aiModel = "google/gemini-3-flash-preview";
+      console.log(`Using Lovable AI pipeline (${pipeline})`);
     }
 
-    // Use AI to extract business info from search results
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
+    // Build extraction prompt
     const extractionPrompt = usedFirecrawl
       ? `You are analyzing web search results to extract Kenyan business leads.
 
@@ -107,14 +129,13 @@ CRITICAL RULES FOR has_website:
 - If the business ONLY appears on directories with NO own website, set has_website to false.
 
 CRITICAL RULES FOR email:
-- EXTRACT every email address you can find. Look for patterns like name@domain.com.
+- EXTRACT every email address you can find.
 - Also extract phone numbers.
 - If no email is found, set email to an empty string, do NOT make one up.
 
 CRITICAL RULES FOR quality:
 - Skip large chains, franchises, or well-known brands.
 - Only include actual businesses, not directory pages themselves.
-- Include the business location as specifically as possible.
 
 Search results:
 ${results.map((r: any, i: number) => `
@@ -133,28 +154,26 @@ Location should default to: ${location || "Kenya"}.`
 Your task: Find REAL small businesses in the category "${category || "general"}" located in "${location || "Kenya"}" that do NOT have their own website.
 
 IMPORTANT RULES:
-- Focus on REAL businesses that exist in Kenya — use your knowledge of Kenyan towns, markets, and business directories.
-- These should be small/medium businesses that would benefit from having a website built for them.
-- Prioritize businesses you'd find on Google Maps listings, Facebook pages, or local directories but that have NO website of their own.
+- Focus on REAL businesses that exist in Kenya.
+- Prioritize businesses you'd find on Google Maps listings, Facebook pages, or local directories but that have NO website.
 - EVERY business MUST have either a phone number or email. Prefer businesses with email addresses.
 - For phone numbers, use Kenyan format (+254...).
-- Set has_website to false for all results (we only want businesses without websites).
+- Set has_website to false for all results.
 - Include 5-8 realistic businesses.
 - Do NOT invent email addresses — only include if you're confident it's real.
-- Include the Google Maps or directory URL as website_url if available.
 
 Extract businesses and return them using the extract_businesses function.
 Category: ${category || "general"}.
 Location: ${location || "Kenya"}.`;
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResponse = await fetch(aiUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${aiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: aiModel,
         messages: [
           { role: "system", content: "You extract structured business data from search results." },
           { role: "user", content: extractionPrompt },
@@ -199,8 +218,8 @@ Location: ${location || "Kenya"}.`;
 
     if (!aiResponse.ok) {
       const errText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errText);
-      throw new Error("AI extraction failed");
+      console.error("AI error:", aiResponse.status, errText);
+      throw new Error(`AI extraction failed (${pipeline})`);
     }
 
     const aiData = await aiResponse.json();
@@ -218,10 +237,9 @@ Location: ${location || "Kenya"}.`;
 
     console.log(`AI extracted ${businesses.length} businesses`);
 
-    // Insert leads into database (skip duplicates by business_name)
+    // Insert leads
     let leadsAdded = 0;
     for (const biz of businesses) {
-      // Check for existing lead with same name for this user
       const { data: existing } = await supabase
         .from("leads")
         .select("id")
@@ -241,6 +259,7 @@ Location: ${location || "Kenya"}.`;
           has_website: biz.has_website ?? false,
           notes: biz.notes || null,
           status: "discovered",
+          discovery_source: pipeline === "firecrawl" && usedFirecrawl ? "web" : "ai_search",
         });
 
         if (!insertError) leadsAdded++;
@@ -252,11 +271,11 @@ Location: ${location || "Kenya"}.`;
     await supabase.from("activity_logs").insert({
       user_id: userId,
       action: "leads_discovered",
-      details: { category, location, query: searchQuery, results_found: results.length, leads_added: leadsAdded },
+      details: { category, location, pipeline, results_found: results.length, leads_added: leadsAdded },
     });
 
     return new Response(
-      JSON.stringify({ success: true, leads_added: leadsAdded, results_found: results.length }),
+      JSON.stringify({ success: true, leads_added: leadsAdded, results_found: results.length, pipeline }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

@@ -9,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search } from "lucide-react";
+import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search, Key } from "lucide-react";
 
 interface PortfolioProject {
   url: string;
@@ -144,6 +144,13 @@ const SettingsPage = () => {
               <div className="flex-1">
                 <div className="flex items-center gap-2"><Cpu className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-sm font-medium">Lovable AI</span></div>
                 <p className="text-xs text-muted-foreground mt-0.5">AI research agent — identifies businesses via local knowledge. No Firecrawl needed.</p>
+              </div>
+            </label>
+            <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${settings.discovery_pipeline === "openai" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
+              <RadioGroupItem value="openai" className="mt-0.5" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2"><Key className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-sm font-medium">OpenAI</span></div>
+                <p className="text-xs text-muted-foreground mt-0.5">Uses your own OpenAI API key (GPT-4o-mini). Configure key in backend secrets.</p>
               </div>
             </label>
           </RadioGroup>
