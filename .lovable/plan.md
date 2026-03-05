@@ -1,117 +1,56 @@
 
 
-## Implementation Plan: OpenAI Pipeline, Portfolio Projects, Cron Jobs, and Data Cleanup
+## Plan: Fix Pipeline Routing and Add OpenAI Pipeline Option
 
-This plan covers all four requested changes in one go.
+### Root Cause
 
----
+The manual "Discover Leads" button on the Lead Discovery page calls `discover-leads` edge function directly, which **never checks the user's `discovery_pipeline` setting**. It always tries Firecrawl first, regardless of what you chose in Settings. The `auto-discover` function (cron job) does check the setting, but `discover-leads` (manual trigger) does not.
 
-### 1. Add Discovery Pipeline Toggle to Settings
-
-**Database migration** -- Add a `discovery_pipeline` column to the `settings` table:
-
-```sql
-ALTER TABLE settings ADD COLUMN discovery_pipeline text DEFAULT 'firecrawl';
-```
-
-**Settings UI** (`src/pages/SettingsPage.tsx`) -- Add a new "Discovery Pipeline" card with two radio-style options:
-- **Firecrawl** (current default) -- Uses web scraping via Firecrawl API
-- **Lovable AI** -- Uses Lovable AI gateway (OpenAI/Gemini models) with web search tool calling to find businesses directly, no Firecrawl needed
-
-The toggle saves to the `discovery_pipeline` column. The settings state gets a new `discovery_pipeline` field.
+Additionally, `discover-leads/index.ts` has a **duplicate variable declaration** (`FIRECRAWL_API_KEY` on lines 51 and 62) which would cause a runtime error.
 
 ---
 
-### 2. Create the Lovable AI Discovery Pipeline
+### Changes
 
-**New edge function**: `supabase/functions/ai-discover/index.ts`
+#### 1. Fix `discover-leads` to respect pipeline setting
 
-This function replaces Firecrawl's search with the Lovable AI gateway. The approach:
+Rewrite `supabase/functions/discover-leads/index.ts`:
+- Remove the duplicate `FIRECRAWL_API_KEY` declaration
+- After authenticating the user, fetch their `settings` row and read `discovery_pipeline`
+- If `lovable_ai`: skip Firecrawl entirely, use the AI-only prompt (existing fallback path)
+- If `openai`: use the OpenAI API key from secrets with the same discovery prompt
+- If `firecrawl` (default): use current Firecrawl logic with AI fallback
 
-1. Read user settings (categories, locations, portfolio projects)
-2. Pick a random category + location
-3. Call the Lovable AI gateway with a detailed prompt asking the model to **act as a research agent** and identify real Kenyan businesses in that category/location that have NO website -- only Google Maps listings, social pages, or directory entries
-4. Use tool calling to extract structured business data (name, phone, email, Google Maps URL, address, category, location, has_website)
-5. Apply the same hard filters: `!has_website` and must have phone or email
-6. Insert into `leads` table with `discovery_source: 'ai_search'`
-7. Run inline analysis + email generation (same logic as auto-discover)
-8. Chain to social-discover and daily-outreach
+#### 2. Add OpenAI pipeline option
 
-The key prompt instructs the AI to think like a local business researcher who would search Google Maps for businesses in specific Kenyan towns that only have a Google listing and no website.
+**Database**: Add no schema changes needed -- `discovery_pipeline` is already a `text` column, so it can store `'openai'` as a value.
 
-**Update `auto-discover/index.ts`** -- At the start, read `discovery_pipeline` from settings. If it's `'lovable_ai'`, call `ai-discover` instead and return. If `'firecrawl'` (default), continue with existing logic.
+**New secret**: Use the `add_secret` tool to request the user's OpenAI API key (`OPENAI_API_KEY`).
 
-This keeps a single entry point (`auto-discover`) that routes to the right pipeline based on settings, so cron jobs don't need to change.
+**Edge functions** -- Update both `discover-leads` and `auto-discover` to handle `pipeline === 'openai'`:
+- Call `https://api.openai.com/v1/chat/completions` directly with the user's OpenAI API key
+- Use `gpt-4o-mini` as the default model (cost-effective for extraction)
+- Same tool-calling schema and prompts as the Lovable AI path, just different endpoint and auth
 
----
+#### 3. Update Settings UI
 
-### 3. Pre-populate Portfolio Projects
+Add a third radio option in the Discovery Pipeline card:
+- **Firecrawl** -- Web scraping via Firecrawl API
+- **Lovable AI** -- Uses built-in AI gateway (no extra keys needed)
+- **OpenAI** -- Uses your own OpenAI API key (GPT-4o-mini)
 
-**SQL insert** (using insert tool, not migration) -- After the user's settings row exists, update it with the four portfolio projects:
+#### 4. Update `auto-discover` routing
 
-```sql
-UPDATE settings SET portfolio_projects = '[
-  {"url": "https://heartbeatsafaris.com", "industry": "Tourism & Travel", "features": "Safari booking, payment integration, mobile responsive, tour packages", "problem_solved": "Enabled online safari bookings, expanding reach to international tourists"},
-  {"url": "https://rangautiles.com", "industry": "Construction & Building Materials", "features": "Product catalog, quote requests, delivery tracking", "problem_solved": "Moved from word-of-mouth to online presence, increasing B2B orders"},
-  {"url": "https://lakevictoriaaquaculture.com", "industry": "Agriculture & Aquaculture", "features": "Product showcase, ordering system, company profile", "problem_solved": "Professional online presence connecting fish farmers to buyers across East Africa"},
-  {"url": "https://itchyfeet.co.ke", "industry": "Tourism & Travel", "features": "Trip planning, booking integration, blog, mobile responsive", "problem_solved": "Centralized travel services online, increasing direct bookings by reducing reliance on third parties"}
-]'::jsonb
-WHERE user_id = (SELECT user_id FROM settings LIMIT 1);
-```
-
-This will be done via the insert tool so it only affects existing data.
+Add `openai` case alongside the existing `lovable_ai` case. For OpenAI, run the same logic as `ai-discover` but swap the API endpoint and key.
 
 ---
 
-### 4. Set Up Automated Cron Jobs
-
-**SQL insert** (using insert tool) -- Create two cron jobs using `pg_cron` and `pg_net`:
-
-- **auto-discover**: Runs every 6 hours (`0 */6 * * *`)
-- **daily-outreach**: Runs every 2 hours during business hours (`0 8,10,12,14,16 * * *`)
-
-Both call the respective edge function URLs with the anon key.
-
----
-
-### 5. Clean Up Bad Leads
-
-**SQL delete** (using insert tool):
-
-```sql
-DELETE FROM leads WHERE has_website = true;
-DELETE FROM leads WHERE phone IS NULL AND email IS NULL;
-```
-
-Also delete any orphaned email_campaigns referencing those leads.
-
----
-
-### Files to Create/Modify
+### Files to Modify
 
 | File | Change |
 |---|---|
-| `supabase/functions/ai-discover/index.ts` | **New** -- Lovable AI-powered discovery pipeline |
-| `supabase/functions/auto-discover/index.ts` | Add pipeline routing logic at the top |
-| `src/pages/SettingsPage.tsx` | Add discovery pipeline toggle card + load/save the new field |
-| `supabase/config.toml` | Add `[functions.ai-discover]` entry |
-| Database | Add `discovery_pipeline` column, insert portfolio projects, create cron jobs, delete bad leads |
-
----
-
-### Technical Details
-
-**The AI discovery prompt** will ask the model to generate realistic business leads based on its knowledge of Kenyan small businesses, structured via tool calling. This is fundamentally different from Firecrawl -- instead of scraping search results, the AI uses its training data to identify likely businesses in specific categories and locations. The trade-off is that the AI may hallucinate business names, but the phone/email contact requirement and the Google Maps link on each card let you verify quickly.
-
-**Pipeline routing** in `auto-discover` will look like:
-
-```typescript
-const pipeline = userSettings.discovery_pipeline || 'firecrawl';
-if (pipeline === 'lovable_ai') {
-  // Call ai-discover function instead
-  await fetch(`${SUPABASE_URL}/functions/v1/ai-discover`, { ... });
-  continue; // Skip firecrawl logic for this user
-}
-// ... existing firecrawl logic
-```
+| `supabase/functions/discover-leads/index.ts` | Fix duplicate var, add pipeline routing (read settings, branch on firecrawl/lovable_ai/openai) |
+| `supabase/functions/auto-discover/index.ts` | Add `openai` pipeline routing case |
+| `supabase/functions/ai-discover/index.ts` | Add optional OpenAI mode (accept `pipeline` param in body) |
+| `src/pages/SettingsPage.tsx` | Add third "OpenAI" radio option with key icon |
 
