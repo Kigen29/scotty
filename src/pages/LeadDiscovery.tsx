@@ -242,6 +242,16 @@ const LeadDiscovery = () => {
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Search className="h-4 w-4 mr-1" />}
               Discover
             </Button>
+            <Badge variant="outline" className={`text-xs gap-1 ${
+              currentPipeline === "openai" ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-400" :
+              currentPipeline === "lovable_ai" ? "border-violet-500/50 text-violet-700 dark:text-violet-400" :
+              "border-orange-500/50 text-orange-700 dark:text-orange-400"
+            }`}>
+              {currentPipeline === "openai" ? <Zap className="h-3 w-3" /> :
+               currentPipeline === "lovable_ai" ? <Cpu className="h-3 w-3" /> :
+               <Flame className="h-3 w-3" />}
+              {currentPipeline === "openai" ? "OpenAI" : currentPipeline === "lovable_ai" ? "Lovable AI" : "Firecrawl"}
+            </Badge>
           </div>
         </CardContent>
       </Card>
