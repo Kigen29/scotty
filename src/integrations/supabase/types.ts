@@ -14,6 +14,64 @@ export type Database = {
   }
   public: {
     Tables: {
+      ab_tests: {
+        Row: {
+          campaign_a_id: string | null
+          campaign_b_id: string | null
+          created_at: string
+          id: string
+          lead_id: string
+          status: string
+          updated_at: string
+          user_id: string
+          winner: string | null
+        }
+        Insert: {
+          campaign_a_id?: string | null
+          campaign_b_id?: string | null
+          created_at?: string
+          id?: string
+          lead_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          winner?: string | null
+        }
+        Update: {
+          campaign_a_id?: string | null
+          campaign_b_id?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          winner?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ab_tests_campaign_a_id_fkey"
+            columns: ["campaign_a_id"]
+            isOneToOne: false
+            referencedRelation: "email_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ab_tests_campaign_b_id_fkey"
+            columns: ["campaign_b_id"]
+            isOneToOne: false
+            referencedRelation: "email_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ab_tests_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_logs: {
         Row: {
           action: string
@@ -78,6 +136,8 @@ export type Database = {
       }
       email_campaigns: {
         Row: {
+          ab_test_id: string | null
+          ab_variant: string | null
           body: string
           channel: string | null
           created_at: string
@@ -93,6 +153,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ab_test_id?: string | null
+          ab_variant?: string | null
           body: string
           channel?: string | null
           created_at?: string
@@ -108,6 +170,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ab_test_id?: string | null
+          ab_variant?: string | null
           body?: string
           channel?: string | null
           created_at?: string
@@ -123,6 +187,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "email_campaigns_ab_test_id_fkey"
+            columns: ["ab_test_id"]
+            isOneToOne: false
+            referencedRelation: "ab_tests"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "email_campaigns_lead_id_fkey"
             columns: ["lead_id"]
