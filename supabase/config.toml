@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.verify-email]
 verify_jwt = false
+
+[functions.enrich-lead]
+verify_jwt = false
