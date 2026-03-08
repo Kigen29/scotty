@@ -1100,6 +1100,88 @@ const Sequences = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Manage Enrollments Dialog */}
+      <Dialog open={!!manageSeqId} onOpenChange={(open) => { if (!open) setManageSeqId(null); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Manage Enrolled Leads</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden flex flex-col">
+            {enrollmentsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground ml-2">Loading enrollments...</span>
+              </div>
+            ) : enrollments.length === 0 ? (
+              <div className="flex flex-col items-center py-8 text-muted-foreground">
+                <Users className="h-8 w-8 mb-2 opacity-50" />
+                <p className="text-sm">No leads enrolled yet</p>
+                <p className="text-xs mt-1">Use "Enroll Leads" to add leads to this sequence</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto space-y-2 min-h-0 max-h-[50vh]">
+                {enrollments.map((enrollment) => (
+                  <div
+                    key={enrollment.id}
+                    className="flex items-center justify-between p-3 rounded-lg border border-border"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{enrollment.business_name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[11px] text-muted-foreground truncate">{enrollment.email || "No email"}</span>
+                        <span className="text-[10px] text-muted-foreground">·</span>
+                        <span className="text-[10px] text-muted-foreground">Step {enrollment.current_step + 1}</span>
+                        <Badge
+                          variant={enrollment.status === "active" ? "default" : "secondary"}
+                          className="text-[9px] h-4"
+                        >
+                          {enrollment.status}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 ml-2 shrink-0">
+                      {enrollment.status === "active" ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Pause enrollment"
+                          onClick={() => updateEnrollmentStatus(enrollment.id, "paused")}
+                        >
+                          <Pause className="h-3.5 w-3.5 text-amber-500" />
+                        </Button>
+                      ) : enrollment.status === "paused" ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Resume enrollment"
+                          onClick={() => updateEnrollmentStatus(enrollment.id, "active")}
+                        >
+                          <Play className="h-3.5 w-3.5 text-emerald-500" />
+                        </Button>
+                      ) : null}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title="Remove from sequence"
+                        onClick={() => removeEnrollment(enrollment.id)}
+                      >
+                        <X className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setManageSeqId(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
