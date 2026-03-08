@@ -11,6 +11,7 @@ import LeadDiscovery from "@/pages/LeadDiscovery";
 import Campaigns from "@/pages/Campaigns";
 import Conversations from "@/pages/Conversations";
 import Reports from "@/pages/Reports";
+import Deliverability from "@/pages/Deliverability";
 import SettingsPage from "@/pages/SettingsPage";
 import Sequences from "@/pages/Sequences";
 import NotFound from "@/pages/NotFound";
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/conversations" element={<Conversations />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/deliverability" element={<Deliverability />} />
             <Route path="/sequences" element={<Sequences />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

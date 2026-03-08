@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    const { lead_id, template_type = "first_touch" } = await req.json();
+    const { lead_id, template_type = "first_touch", ab_test = false } = await req.json();
 
     if (!lead_id) {
       return new Response(JSON.stringify({ error: "lead_id is required" }), {
@@ -154,11 +154,12 @@ This is your first follow-up after your initial personal email went unanswered.
             type: "function",
             function: {
               name: "compose_email",
-              description: "Compose the outreach email",
+              description: "Compose the outreach email. If ab_variant is requested, provide two different subject lines.",
               parameters: {
                 type: "object",
                 properties: {
                   subject: { type: "string", description: "Email subject line, compelling and personalized" },
+                  subject_b: { type: "string", description: "Alternative subject line for A/B testing (different angle/tone)" },
                   body: { type: "string", description: "Email body text, well-formatted with line breaks" },
                 },
                 required: ["subject", "body"],
@@ -196,8 +197,8 @@ This is your first follow-up after your initial personal email went unanswered.
 
     const email = JSON.parse(toolCall.function.arguments);
 
-    // Save as email campaign
-    const { data: campaign, error: campaignError } = await supabase
+    // Save as email campaign (variant A)
+    const { data: campaignA, error: campaignError } = await supabase
       .from("email_campaigns")
       .insert({
         user_id: userId,
@@ -206,11 +207,49 @@ This is your first follow-up after your initial personal email went unanswered.
         body: email.body,
         template_type,
         status: "draft",
+        ab_variant: ab_test ? "a" : null,
       })
       .select()
       .single();
 
     if (campaignError) throw campaignError;
+
+    let abTestRecord = null;
+
+    // If A/B test requested and we got a variant B subject
+    if (ab_test && email.subject_b) {
+      const { data: campaignB } = await supabase
+        .from("email_campaigns")
+        .insert({
+          user_id: userId,
+          lead_id: lead_id,
+          subject: email.subject_b,
+          body: email.body,
+          template_type,
+          status: "draft",
+          ab_variant: "b",
+        })
+        .select()
+        .single();
+
+      if (campaignB) {
+        const { data: abTest } = await supabase
+          .from("ab_tests")
+          .insert({
+            user_id: userId,
+            lead_id: lead_id,
+            campaign_a_id: campaignA.id,
+            campaign_b_id: campaignB.id,
+          })
+          .select()
+          .single();
+
+        abTestRecord = abTest;
+
+        // Link campaigns back to the ab_test
+        await supabase.from("email_campaigns").update({ ab_test_id: abTest?.id }).in("id", [campaignA.id, campaignB.id]);
+      }
+    }
 
     // Update lead status if first touch
     if (template_type === "first_touch" && lead.status === "discovered") {
@@ -220,11 +259,11 @@ This is your first follow-up after your initial personal email went unanswered.
     // Log activity
     await supabase.from("activity_logs").insert({
       user_id: userId,
-      action: "email_generated",
-      details: { lead_id, business_name: lead.business_name, template_type },
+      action: ab_test ? "ab_test_created" : "email_generated",
+      details: { lead_id, business_name: lead.business_name, template_type, ab_test: !!ab_test },
     });
 
-    return new Response(JSON.stringify({ success: true, campaign }), {
+    return new Response(JSON.stringify({ success: true, campaign: campaignA, ab_test: abTestRecord }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

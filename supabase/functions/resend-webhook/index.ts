@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
 
     const { data: campaign } = await supabase
       .from("email_campaigns")
-      .select("id")
+      .select("id, ab_test_id, ab_variant")
       .eq("lead_id", lead.id)
       .eq("status", "sent")
       .order("sent_at", { ascending: false })
@@ -68,6 +68,23 @@ Deno.serve(async (req) => {
             status: "opened",
             opened_at: new Date().toISOString(),
           }).eq("id", campaign.id);
+
+          // Auto-determine A/B test winner
+          if (campaign.ab_test_id) {
+            const { data: abTest } = await supabase
+              .from("ab_tests")
+              .select("*")
+              .eq("id", campaign.ab_test_id)
+              .maybeSingle();
+
+            if (abTest && !abTest.winner) {
+              const winner = campaign.ab_variant || "a";
+              await supabase.from("ab_tests").update({
+                winner,
+                status: "completed",
+              }).eq("id", abTest.id);
+            }
+          }
         }
         await supabase.from("activity_logs").insert({
           user_id: lead.user_id,
