@@ -704,9 +704,16 @@ const LeadDiscovery = () => {
 
                 {/* Actions */}
                 <div className="flex flex-col gap-2 pt-2">
-                  <Button variant="outline" onClick={() => openExternal(getProfileUrl(detailLead))}>
-                    <ExternalLink className="h-4 w-4 mr-2" /> View Profile
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={() => openExternal(getProfileUrl(detailLead))}>
+                      <ExternalLink className="h-4 w-4 mr-2" /> View Profile
+                    </Button>
+                    {!(detailLead.analysis as any)?.enrichment && (
+                      <Button variant="outline" onClick={() => enrichLeads([detailLead.id])} disabled={enriching === detailLead.id}>
+                        {enriching === detailLead.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      </Button>
+                    )}
+                  </div>
                   {detailLead.status === "discovered" && (
                     <div className="flex gap-2">
                       <Button className="flex-1" onClick={() => { updateLeadStatus(detailLead.id, "qualified"); setDetailLead(null); }}>
