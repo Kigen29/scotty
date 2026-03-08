@@ -370,6 +370,9 @@ const LeadDiscovery = () => {
           <Button size="sm" variant="outline" onClick={() => bulkUpdateStatus("qualified")}>
             <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
           </Button>
+          <Button size="sm" variant="outline" onClick={() => verifyEmails()} disabled={verifying}>
+            <ShieldCheck className="h-3.5 w-3.5 mr-1" /> {verifying ? "Verifying..." : "Verify Emails"}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => bulkUpdateStatus("dismissed")}>
             <X className="h-3.5 w-3.5 mr-1" /> Dismiss
           </Button>
