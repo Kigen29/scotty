@@ -28,6 +28,10 @@ const Pipeline = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [selectedLead, setSelectedLead] = useState<any | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [locationFilter, setLocationFilter] = useState("all");
+  const [minPriority, setMinPriority] = useState(0);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
