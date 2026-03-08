@@ -11,7 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Trash2, GripVertical, Mail, Clock, ArrowDown, Zap,
-  ChevronDown, ChevronUp, Sparkles, Loader2, Wand2,
+  ChevronDown, ChevronUp, Sparkles, Loader2, Wand2, RotateCcw, Send, UserPlus,
 } from "lucide-react";
 import {
   Select,
