@@ -124,6 +124,14 @@ const Sequences = () => {
   const [stepAnalytics, setStepAnalytics] = useState<StepAnalytics[]>([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
+  // Bulk enrollment state
+  const [enrollSeqId, setEnrollSeqId] = useState<string | null>(null);
+  const [availableLeads, setAvailableLeads] = useState<{ id: string; business_name: string; email: string | null; location: string | null }[]>([]);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
+  const [enrolling, setEnrolling] = useState(false);
+  const [leadsLoading, setLeadsLoading] = useState(false);
+  const [leadSearch, setLeadSearch] = useState("");
+
   useEffect(() => {
     if (user) {
       fetchSequences();
