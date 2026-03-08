@@ -73,8 +73,21 @@ const LeadDiscovery = () => {
   const perPage = 25;
 
   useEffect(() => {
-    if (user) fetchLeads();
+    if (user) {
+      fetchLeads();
+      fetchPipeline();
+    }
   }, [user]);
+
+  const fetchPipeline = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("settings")
+      .select("discovery_pipeline")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (data?.discovery_pipeline) setCurrentPipeline(data.discovery_pipeline);
+  };
 
   const fetchLeads = async () => {
     if (!user) return;
