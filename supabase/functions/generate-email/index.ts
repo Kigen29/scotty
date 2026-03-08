@@ -90,6 +90,8 @@ Deno.serve(async (req) => {
 - Propose these solutions: ${(analysisData.recommended_solutions || []).join("; ")}`
       : "";
 
+    const bookingContext = bookingLink ? `\n- Include a booking link for a free consultation: ${bookingLink}` : "";
+
     const templatePrompts: Record<string, string> = {
       first_touch: `You are Emmanuel Kigen, a freelance web developer reaching out personally to ${lead.business_name}, a ${lead.category || "business"} in ${lead.location || "Kenya"}.
 
