@@ -19,8 +19,9 @@ Deno.serve(async (req) => {
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!FIRECRAWL_API_KEY || !LOVABLE_API_KEY) {
-      throw new Error("Missing required API keys");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!LOVABLE_API_KEY && !OPENAI_API_KEY) {
+      throw new Error("Missing AI API keys (LOVABLE_API_KEY or OPENAI_API_KEY)");
     }
 
     let usersToProcess: any[] = [];
@@ -48,6 +49,8 @@ Deno.serve(async (req) => {
       const socialEnabled = (userSettings as any).social_discovery_enabled !== false;
       if (!socialEnabled) continue;
 
+      const pipeline = (userSettings as any).discovery_pipeline || "firecrawl";
+
       const categories = userSettings.target_categories || [];
       const locations = userSettings.target_locations || [];
       if (categories.length === 0 || locations.length === 0) continue;
@@ -55,11 +58,27 @@ Deno.serve(async (req) => {
       const category = categories[Math.floor(Math.random() * categories.length)];
       const location = locations[Math.floor(Math.random() * locations.length)];
 
+      // Determine AI endpoint based on pipeline
+      let aiUrl: string;
+      let aiKey: string;
+      let aiModel: string;
+      if (pipeline === "openai" && OPENAI_API_KEY) {
+        aiUrl = "https://api.openai.com/v1/chat/completions";
+        aiKey = OPENAI_API_KEY;
+        aiModel = "gpt-4o-mini";
+      } else if (LOVABLE_API_KEY) {
+        aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+        aiKey = LOVABLE_API_KEY;
+        aiModel = "google/gemini-3-flash-preview";
+      } else {
+        console.error("No AI key available for social discovery");
+        continue;
+      }
+
       // Search for Instagram/TikTok pages of businesses with NO separate website
       const platforms = [
         {
           name: "instagram",
-          // Target IG pages where the bio has NO website link — phone/WhatsApp only businesses
           query: `site:instagram.com "${category}" "${location}" Kenya -".co.ke" -".com" phone OR WhatsApp OR "contact us"`,
         },
         {
@@ -69,43 +88,44 @@ Deno.serve(async (req) => {
       ];
 
       for (const platform of platforms) {
-        console.log(`Social discovery [${platform.name}] no-website filter: ${platform.query}`);
+        console.log(`Social discovery [${platform.name}] pipeline=${pipeline}: ${platform.query}`);
 
-        const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            query: platform.query,
-            limit: 8,
-            lang: "en",
-            country: "ke",
-            scrapeOptions: { formats: ["markdown"] },
-          }),
-        });
+        let results: any[] = [];
 
-        const searchData = await searchResponse.json();
-        if (!searchResponse.ok) {
-          console.error(`Firecrawl error [${platform.name}]:`, searchData);
-          continue;
+        // Only use Firecrawl for search if available and pipeline is firecrawl
+        if (FIRECRAWL_API_KEY && pipeline === "firecrawl") {
+          const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              query: platform.query,
+              limit: 8,
+              lang: "en",
+              country: "ke",
+              scrapeOptions: { formats: ["markdown"] },
+            }),
+          });
+
+          const searchData = await searchResponse.json();
+          if (!searchResponse.ok) {
+            console.error(`Firecrawl error [${platform.name}]:`, searchData);
+          } else {
+            results = searchData.data || [];
+          }
         }
 
-        const results = searchData.data || [];
-        if (results.length === 0) continue;
-
-        // Strict no-website extraction prompt for social media
-        const extractionPrompt = `You are extracting Kenyan business leads from ${platform.name} pages.
+        // Build prompt — either from search results or pure AI research
+        const extractionPrompt = results.length > 0
+          ? `You are extracting Kenyan business leads from ${platform.name} pages.
 
 STRICT RULES — NO EXCEPTIONS:
 1. ONLY extract businesses that have NO separate website of their own
-2. If the bio, description, or any content shows a custom domain (e.g. "businessname.co.ke", "businessname.com", any website URL that is NOT instagram/tiktok/facebook/linktr.ee), set has_website: true — these will be SKIPPED
-3. A business whose ENTIRE online presence is just this ${platform.name} page is our PERFECT TARGET
-4. A linktree that only links to social pages (not a website domain) is acceptable
-5. Extract phone numbers aggressively — WhatsApp numbers in bios are gold
-6. Extract any emails visible in the bio or description
-7. The ${platform.name} handle/username is the primary social identifier
+2. If the bio, description, or any content shows a custom domain, set has_website: true
+3. Extract phone numbers aggressively — WhatsApp numbers in bios are gold
+4. Extract any emails visible in the bio or description
 
 Search results:
 ${results.map((r: any, i: number) => `
@@ -116,16 +136,28 @@ Description: ${r.description || ""}
 Content: ${(r.markdown || "").substring(0, 600)}
 `).join("\n")}
 
-Target category: ${category}. Target location: ${location}, Kenya.`;
+Target category: ${category}. Target location: ${location}, Kenya.`
+          : `You are a social media business researcher.
 
-        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+Find REAL ${category} businesses on ${platform.name} in ${location}, Kenya that do NOT have a website.
+These businesses use ${platform.name} as their primary online presence.
+
+Return 5-8 realistic businesses with:
+- Business name, handle, category, location
+- Phone/WhatsApp numbers (Kenyan format +254...)
+- Email if available
+- has_website: false for all
+
+Only include businesses you believe actually exist.`;
+
+        const aiResponse = await fetch(aiUrl, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            Authorization: `Bearer ${aiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "google/gemini-3-flash-preview",
+            model: aiModel,
             messages: [
               { role: "system", content: `Extract ONLY businesses with NO website from ${platform.name} search results. Businesses relying solely on social media are ideal leads for web development services.` },
               { role: "user", content: extractionPrompt },
@@ -251,14 +283,14 @@ My portfolio: ${JSON.stringify(portfolioProjects)}
 
 Priority score 1-10, pain points, solutions, matched portfolio.`;
 
-            const analysisResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            const analysisResponse = await fetch(aiUrl, {
               method: "POST",
               headers: {
-                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                Authorization: `Bearer ${aiKey}`,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                model: "google/gemini-3-flash-preview",
+                model: aiModel,
                 messages: [
                   { role: "system", content: "You are a business intelligence analyst." },
                   { role: "user", content: analysisPrompt },

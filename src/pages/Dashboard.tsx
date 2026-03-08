@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Users, Mail, MessageSquare, TrendingUp, Flame, Star, Zap, Send } from "lucide-react";
+import { Users, Mail, MessageSquare, TrendingUp, Flame, Star, Zap, Send, Gauge } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -15,14 +15,20 @@ const Dashboard = () => {
   const [activities, setActivities] = useState<any[]>([]);
   const [hotLeads, setHotLeads] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
+  const [quota, setQuota] = useState({ sent: 0, limit: 50 });
 
   useEffect(() => {
     if (!user) return;
     const fetchAll = async () => {
-      const [{ data: leads }, { data: emails }, { data: logs }] = await Promise.all([
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const [{ data: leads }, { data: emails }, { data: logs }, { data: settingsData }, { count: sentToday }] = await Promise.all([
         supabase.from("leads").select("*").eq("user_id", user.id),
         supabase.from("email_campaigns").select("*").eq("user_id", user.id),
         supabase.from("activity_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(15),
+        supabase.from("settings").select("daily_send_limit").eq("user_id", user.id).maybeSingle(),
+        supabase.from("email_campaigns").select("id", { count: "exact", head: true }).eq("user_id", user.id).gte("sent_at", todayStart.toISOString()),
       ]);
 
       if (leads) {
@@ -59,6 +65,10 @@ const Dashboard = () => {
         setChartData(days);
       }
       if (logs) setActivities(logs);
+      setQuota({
+        sent: sentToday || 0,
+        limit: settingsData?.daily_send_limit || 50,
+      });
     };
     fetchAll();
   }, [user]);
@@ -116,6 +126,28 @@ const Dashboard = () => {
           </Card>
         ))}
       </div>
+
+      {/* Daily Quota */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Today's Send Quota</span>
+            </div>
+            <span className="text-sm font-semibold">{quota.sent} / {quota.limit}</span>
+          </div>
+          <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all duration-500"
+              style={{ width: `${Math.min((quota.sent / quota.limit) * 100, 100)}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground mt-1.5">
+            {quota.limit - quota.sent > 0 ? `${quota.limit - quota.sent} emails remaining today` : "Daily limit reached"}
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Pipeline funnel */}
       <Card>

@@ -141,6 +141,27 @@ const LeadDiscovery = () => {
     }
   };
 
+  const analyzeLead = async (leadId: string) => {
+    try {
+      const { error } = await supabase.functions.invoke("analyze-lead", {
+        body: { lead_id: leadId },
+      });
+      if (error) throw error;
+      toast({ title: "Lead analyzed", description: "AI analysis complete" });
+      fetchLeads();
+    } catch (error: any) {
+      toast({ title: "Analysis failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const deleteLead = async (leadId: string) => {
+    const { error } = await supabase.from("leads").delete().eq("id", leadId);
+    if (!error) {
+      fetchLeads();
+      toast({ title: "Lead deleted" });
+    }
+  };
+
   const bulkUpdateStatus = async (status: string) => {
     const ids = Array.from(selected);
     if (ids.length === 0) return;
@@ -150,6 +171,17 @@ const LeadDiscovery = () => {
     setSelected(new Set());
     fetchLeads();
     toast({ title: `${ids.length} leads updated to ${status}` });
+  };
+
+  const bulkDelete = async () => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    for (const id of ids) {
+      await supabase.from("leads").delete().eq("id", id);
+    }
+    setSelected(new Set());
+    fetchLeads();
+    toast({ title: `${ids.length} leads deleted` });
   };
 
   // Filtered & sorted
@@ -304,13 +336,16 @@ const LeadDiscovery = () => {
 
       {/* Bulk actions */}
       {selected.size > 0 && (
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20 flex-wrap">
           <span className="text-sm font-medium">{selected.size} selected</span>
           <Button size="sm" variant="outline" onClick={() => bulkUpdateStatus("qualified")}>
             <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
           </Button>
           <Button size="sm" variant="outline" onClick={() => bulkUpdateStatus("dismissed")}>
-            <Trash2 className="h-3.5 w-3.5 mr-1" /> Dismiss
+            <X className="h-3.5 w-3.5 mr-1" /> Dismiss
+          </Button>
+          <Button size="sm" variant="destructive" onClick={bulkDelete}>
+            <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
         </div>
@@ -419,8 +454,16 @@ const LeadDiscovery = () => {
                           {generatingEmail === lead.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
                         </Button>
                       )}
+                      {!lead.analysis && (
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" title="Analyze" onClick={() => analyzeLead(lead.id)}>
+                          <Brain className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => openExternal(getProfileUrl(lead))}>
                         <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={() => deleteLead(lead.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </TableCell>
