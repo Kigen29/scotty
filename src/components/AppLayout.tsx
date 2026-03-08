@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, Search, Mail, MessageSquare, BarChart3, Settings, Zap, LogOut, Menu, X, GitBranch, ShieldCheck,
+  LayoutDashboard, Search, Mail, MessageSquare, BarChart3, Settings, Zap, LogOut, Menu, X, GitBranch, ShieldCheck, Columns3,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
