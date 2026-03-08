@@ -233,6 +233,7 @@ const Pipeline = () => {
                 color={stage.color}
                 leads={filteredLeads.filter((l) => l.status === stage.id)}
                 onCardClick={setSelectedLead}
+                memberMap={memberMap}
               />
             ))}
           </div>
