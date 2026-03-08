@@ -13,7 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search, Globe, Phone, Mail, MapPin, CheckCircle2, X, Loader2, Star, Brain,
-  ExternalLink, ChevronUp, ChevronDown, Users, Filter, ArrowUpDown, Trash2,
+  ExternalLink, ChevronUp, ChevronDown, Users, Filter, ArrowUpDown, Trash2, Cpu, Zap, Flame,
 } from "lucide-react";
 
 const categories = [
@@ -48,6 +48,9 @@ const LeadDiscovery = () => {
   const [discLocation, setDiscLocation] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Current pipeline
+  const [currentPipeline, setCurrentPipeline] = useState<string>("firecrawl");
+
   // Filters
   const [filterSearch, setFilterSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
@@ -70,8 +73,21 @@ const LeadDiscovery = () => {
   const perPage = 25;
 
   useEffect(() => {
-    if (user) fetchLeads();
+    if (user) {
+      fetchLeads();
+      fetchPipeline();
+    }
   }, [user]);
+
+  const fetchPipeline = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("settings")
+      .select("discovery_pipeline")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (data?.discovery_pipeline) setCurrentPipeline(data.discovery_pipeline);
+  };
 
   const fetchLeads = async () => {
     if (!user) return;
@@ -94,7 +110,8 @@ const LeadDiscovery = () => {
         body: { category: discCategory, location: discLocation, query: searchQuery },
       });
       if (error) throw error;
-      toast({ title: "Discovery complete", description: `Found ${data?.leads_added || 0} new leads` });
+      const pipelineLabel = data?.pipeline === "openai" ? "OpenAI" : data?.pipeline === "lovable_ai" ? "Lovable AI" : "Firecrawl";
+      toast({ title: "Discovery complete", description: `Found ${data?.leads_added || 0} new leads via ${pipelineLabel}` });
       fetchLeads();
     } catch (error: any) {
       toast({ title: "Discovery failed", description: error.message, variant: "destructive" });
@@ -225,6 +242,16 @@ const LeadDiscovery = () => {
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Search className="h-4 w-4 mr-1" />}
               Discover
             </Button>
+            <Badge variant="outline" className={`text-xs gap-1 ${
+              currentPipeline === "openai" ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-400" :
+              currentPipeline === "lovable_ai" ? "border-violet-500/50 text-violet-700 dark:text-violet-400" :
+              "border-orange-500/50 text-orange-700 dark:text-orange-400"
+            }`}>
+              {currentPipeline === "openai" ? <Zap className="h-3 w-3" /> :
+               currentPipeline === "lovable_ai" ? <Cpu className="h-3 w-3" /> :
+               <Flame className="h-3 w-3" />}
+              {currentPipeline === "openai" ? "OpenAI" : currentPipeline === "lovable_ai" ? "Lovable AI" : "Firecrawl"}
+            </Badge>
           </div>
         </CardContent>
       </Card>
@@ -315,6 +342,7 @@ const LeadDiscovery = () => {
                 <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("priority_score")}>
                   <span className="flex items-center">Priority <SortIcon col="priority_score" /></span>
                 </TableHead>
+                <TableHead>Source</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -357,6 +385,23 @@ const LeadDiscovery = () => {
                       <span className="text-sm">{lead.priority_score || 5}</span>
                     </div>
                   </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 gap-0.5 ${
+                      lead.discovery_source === "ai_search" ? "border-violet-500/40 text-violet-600 dark:text-violet-400" :
+                      lead.discovery_source === "google_maps" ? "border-orange-500/40 text-orange-600 dark:text-orange-400" :
+                      lead.discovery_source === "social" ? "border-blue-500/40 text-blue-600 dark:text-blue-400" :
+                      "border-muted-foreground/30 text-muted-foreground"
+                    }`}>
+                      {lead.discovery_source === "ai_search" ? <Cpu className="h-2.5 w-2.5" /> :
+                       lead.discovery_source === "google_maps" ? <Flame className="h-2.5 w-2.5" /> :
+                       lead.discovery_source === "social" ? <Globe className="h-2.5 w-2.5" /> :
+                       <Search className="h-2.5 w-2.5" />}
+                      {lead.discovery_source === "ai_search" ? "AI" :
+                       lead.discovery_source === "google_maps" ? "Maps" :
+                       lead.discovery_source === "social" ? "Social" :
+                       lead.discovery_source || "Web"}
+                    </Badge>
+                  </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1">
                       {lead.status === "discovered" && (
@@ -383,7 +428,7 @@ const LeadDiscovery = () => {
               ))}
               {paged.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
                     {leads.length === 0 ? (
                       <div>
                         <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
