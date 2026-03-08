@@ -940,7 +940,14 @@ const Sequences = () => {
                     <div className="flex items-center gap-3">
                       <div className={`h-2 w-2 rounded-full ${seq.is_active ? "bg-emerald-500" : "bg-muted-foreground/30"}`} />
                       <div>
-                        <h3 className="text-sm font-medium">{seq.name}</h3>
+                        <h3 className="text-sm font-medium flex items-center gap-1.5">
+                          {seq.name}
+                          {(enrollmentCounts[seq.id!] ?? 0) > 0 && (
+                            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 font-normal">
+                              {enrollmentCounts[seq.id!]} enrolled
+                            </Badge>
+                          )}
+                        </h3>
                         <p className="text-xs text-muted-foreground">{seq.steps.length} step{seq.steps.length !== 1 ? "s" : ""}</p>
                       </div>
                     </div>
