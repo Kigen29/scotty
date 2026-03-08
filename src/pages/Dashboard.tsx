@@ -1,19 +1,23 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { Users, Mail, MessageSquare, TrendingUp, Flame, Star, Zap, Send, Gauge, CalendarDays } from "lucide-react";
+import { useTeam } from "@/hooks/useTeam";
+import { Users, Mail, MessageSquare, TrendingUp, Flame, Star, Zap, Send, Gauge, CalendarDays, UserCircle } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { members, teamId } = useTeam();
   const [stats, setStats] = useState({
     totalLeads: 0, qualified: 0, contacted: 0, responded: 0, interested: 0, notInterested: 0, emailsSent: 0, drafts: 0, responseRate: 0, meetingsBooked: 0,
   });
   const [activities, setActivities] = useState<any[]>([]);
+  const [teamActivities, setTeamActivities] = useState<any[]>([]);
   const [hotLeads, setHotLeads] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [quota, setQuota] = useState({ sent: 0, limit: 50 });
@@ -76,6 +80,25 @@ const Dashboard = () => {
     if (user) fetchAll();
   }, [user, fetchAll]);
 
+  // Fetch team-wide activity
+  useEffect(() => {
+    if (!teamId || members.length === 0) {
+      setTeamActivities([]);
+      return;
+    }
+    const fetchTeamActivity = async () => {
+      const memberIds = members.map((m) => m.user_id);
+      const { data } = await supabase
+        .from("activity_logs")
+        .select("*")
+        .in("user_id", memberIds)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (data) setTeamActivities(data);
+    };
+    fetchTeamActivity();
+  }, [teamId, members]);
+
   useRealtimeSubscription("leads", user?.id, fetchAll);
   useRealtimeSubscription("email_campaigns", user?.id, fetchAll);
   useRealtimeSubscription("activity_logs", user?.id, fetchAll);
@@ -97,6 +120,9 @@ const Dashboard = () => {
     { label: "Interested", count: stats.interested, color: "bg-emerald-500" },
   ];
   const maxPipeline = Math.max(...pipeline.map((p) => p.count), 1);
+
+  const memberNameMap: Record<string, string> = {};
+  members.forEach((m) => { memberNameMap[m.user_id] = m.display_name; });
 
   const relativeTime = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -252,30 +278,73 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Recent Activity */}
+      {/* Activity Feed with Team Tab */}
       <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Recent Activity</CardTitle></CardHeader>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Activity</CardTitle>
+        </CardHeader>
         <CardContent>
-          {activities.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No activity yet</p>
-          ) : (
-            <div className="space-y-1.5">
-              {activities.map((a) => (
-                <div key={a.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors">
-                  <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-                    <Zap className="h-3.5 w-3.5 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm">{a.action?.replace(/_/g, " ")}</span>
-                    {a.details?.business_name && (
-                      <span className="text-xs text-muted-foreground ml-1.5">— {a.details.business_name}</span>
-                    )}
-                  </div>
-                  <span className="text-xs text-muted-foreground shrink-0">{relativeTime(a.created_at)}</span>
+          <Tabs defaultValue="mine">
+            <TabsList className="mb-3">
+              <TabsTrigger value="mine">My Activity</TabsTrigger>
+              {members.length > 1 && (
+                <TabsTrigger value="team">
+                  <Users className="h-3 w-3 mr-1.5" /> Team
+                </TabsTrigger>
+              )}
+            </TabsList>
+
+            <TabsContent value="mine">
+              {activities.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No activity yet</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {activities.map((a) => (
+                    <div key={a.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors">
+                      <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                        <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm">{a.action?.replace(/_/g, " ")}</span>
+                        {a.details?.business_name && (
+                          <span className="text-xs text-muted-foreground ml-1.5">— {a.details.business_name}</span>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground shrink-0">{relativeTime(a.created_at)}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )}
+            </TabsContent>
+
+            {members.length > 1 && (
+              <TabsContent value="team">
+                {teamActivities.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">No team activity yet</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {teamActivities.map((a) => (
+                      <div key={a.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors">
+                        <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                          <UserCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-medium text-primary">
+                            {memberNameMap[a.user_id] || "Unknown"}
+                          </span>
+                          <span className="text-sm ml-1.5">{a.action?.replace(/_/g, " ")}</span>
+                          {a.details?.business_name && (
+                            <span className="text-xs text-muted-foreground ml-1.5">— {a.details.business_name}</span>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground shrink-0">{relativeTime(a.created_at)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            )}
+          </Tabs>
         </CardContent>
       </Card>
     </div>
