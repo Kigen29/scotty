@@ -11,6 +11,7 @@ import LeadDiscovery from "@/pages/LeadDiscovery";
 import Campaigns from "@/pages/Campaigns";
 import Conversations from "@/pages/Conversations";
 import Reports from "@/pages/Reports";
+import Deliverability from "@/pages/Deliverability";
 import SettingsPage from "@/pages/SettingsPage";
 import Sequences from "@/pages/Sequences";
 import NotFound from "@/pages/NotFound";
