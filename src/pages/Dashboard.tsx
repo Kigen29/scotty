@@ -121,6 +121,9 @@ const Dashboard = () => {
   ];
   const maxPipeline = Math.max(...pipeline.map((p) => p.count), 1);
 
+  const memberNameMap: Record<string, string> = {};
+  members.forEach((m) => { memberNameMap[m.user_id] = m.display_name; });
+
   const relativeTime = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
