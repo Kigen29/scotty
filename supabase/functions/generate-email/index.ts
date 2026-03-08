@@ -101,7 +101,7 @@ Write a compelling personal cold email:
 - Mention specific pain points for ${lead.category || "their"} businesses (e.g., manual booking, no online ordering, no customer reviews visibility)
 - Present yourself as a freelance web developer who personally offers: ${services}${portfolioContext}${analysisContext}
 - Keep it personal, warm, and genuine — you're a real person reaching out, not a company
-- End with a soft call-to-action (suggest a brief call or WhatsApp chat)
+- End with a soft call-to-action (suggest a brief call or WhatsApp chat)${bookingContext}
 - Sign off as Emmanuel Kigen
 ${signature ? `- Use this signature: ${signature}` : ""}
 
