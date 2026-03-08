@@ -1,56 +1,46 @@
 
 
-## Plan: Fix Pipeline Routing and Add OpenAI Pipeline Option
+# AI-Assisted Sequence Step Generation
 
-### Root Cause
+## Overview
+Add an "AI Generate" button to the Sequences builder that lets users describe their outreach goal in plain text and have AI generate a complete multi-step sequence (name, subjects, prompts, delays) automatically. Also add per-step AI assist to refine or rewrite individual step prompts.
 
-The manual "Discover Leads" button on the Lead Discovery page calls `discover-leads` edge function directly, which **never checks the user's `discovery_pipeline` setting**. It always tries Firecrawl first, regardless of what you chose in Settings. The `auto-discover` function (cron job) does check the setting, but `discover-leads` (manual trigger) does not.
+## Changes
 
-Additionally, `discover-leads/index.ts` has a **duplicate variable declaration** (`FIRECRAWL_API_KEY` on lines 51 and 62) which would cause a runtime error.
+### 1. Create edge function `generate-sequence-steps`
+**New file: `supabase/functions/generate-sequence-steps/index.ts`**
 
----
+- Accepts `{ goal, num_steps?, existing_steps? }` in the request body
+- Uses Lovable AI gateway (`google/gemini-3-flash-preview`) with tool calling to return structured output
+- Two modes:
+  - **Full generation**: User provides a goal like "Cold outreach to restaurants without websites" and number of steps (default 3). AI returns sequence name + all steps with subjects, body prompts, and delay days.
+  - **Single step refine**: User provides an existing step's body_prompt and asks AI to improve/rewrite it. Returns updated subject + body_prompt.
+- Tool calling schema returns `{ name, steps: [{ subject, body_prompt, delay_days, channel }] }` for full generation, or `{ subject, body_prompt }` for single-step refine.
+- Standard CORS, auth via Authorization header, rate limit error handling (429/402).
 
-### Changes
+### 2. Register function in `supabase/config.toml`
+Add `[functions.generate-sequence-steps]` with `verify_jwt = false`.
 
-#### 1. Fix `discover-leads` to respect pipeline setting
+### 3. Update `src/pages/Sequences.tsx`
+Add two AI features to the builder view:
 
-Rewrite `supabase/functions/discover-leads/index.ts`:
-- Remove the duplicate `FIRECRAWL_API_KEY` declaration
-- After authenticating the user, fetch their `settings` row and read `discovery_pipeline`
-- If `lovable_ai`: skip Firecrawl entirely, use the AI-only prompt (existing fallback path)
-- If `openai`: use the OpenAI API key from secrets with the same discovery prompt
-- If `firecrawl` (default): use current Firecrawl logic with AI fallback
+**a) "Generate with AI" button** — shown at the top of the builder when creating a new sequence:
+- Opens a small inline form with a text input for the goal and a number selector for step count (2-5)
+- Calls the edge function, then populates `editing` state with the returned name and steps
+- Shows a loading spinner with "AI is generating your sequence..." text
 
-#### 2. Add OpenAI pipeline option
+**b) Per-step "AI Improve" button** — shown inside each expanded step:
+- Small sparkle icon button next to the "AI Prompt / Template" label
+- Sends the current step's body_prompt to the edge function in refine mode
+- Replaces the step's subject and body_prompt with the AI-improved versions
 
-**Database**: Add no schema changes needed -- `discovery_pipeline` is already a `text` column, so it can store `'openai'` as a value.
+Both features use `supabase.functions.invoke()` for the call.
 
-**New secret**: Use the `add_secret` tool to request the user's OpenAI API key (`OPENAI_API_KEY`).
-
-**Edge functions** -- Update both `discover-leads` and `auto-discover` to handle `pipeline === 'openai'`:
-- Call `https://api.openai.com/v1/chat/completions` directly with the user's OpenAI API key
-- Use `gpt-4o-mini` as the default model (cost-effective for extraction)
-- Same tool-calling schema and prompts as the Lovable AI path, just different endpoint and auth
-
-#### 3. Update Settings UI
-
-Add a third radio option in the Discovery Pipeline card:
-- **Firecrawl** -- Web scraping via Firecrawl API
-- **Lovable AI** -- Uses built-in AI gateway (no extra keys needed)
-- **OpenAI** -- Uses your own OpenAI API key (GPT-4o-mini)
-
-#### 4. Update `auto-discover` routing
-
-Add `openai` case alongside the existing `lovable_ai` case. For OpenAI, run the same logic as `ai-discover` but swap the API endpoint and key.
-
----
-
-### Files to Modify
+## Files
 
 | File | Change |
 |---|---|
-| `supabase/functions/discover-leads/index.ts` | Fix duplicate var, add pipeline routing (read settings, branch on firecrawl/lovable_ai/openai) |
-| `supabase/functions/auto-discover/index.ts` | Add `openai` pipeline routing case |
-| `supabase/functions/ai-discover/index.ts` | Add optional OpenAI mode (accept `pipeline` param in body) |
-| `src/pages/SettingsPage.tsx` | Add third "OpenAI" radio option with key icon |
+| `supabase/functions/generate-sequence-steps/index.ts` | New edge function |
+| `supabase/config.toml` | Add function entry |
+| `src/pages/Sequences.tsx` | Add AI generate button, per-step AI improve button, loading states |
 
