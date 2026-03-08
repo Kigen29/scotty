@@ -12,10 +12,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { members, teamId } = useTeam();
   const [stats, setStats] = useState({
     totalLeads: 0, qualified: 0, contacted: 0, responded: 0, interested: 0, notInterested: 0, emailsSent: 0, drafts: 0, responseRate: 0, meetingsBooked: 0,
   });
   const [activities, setActivities] = useState<any[]>([]);
+  const [teamActivities, setTeamActivities] = useState<any[]>([]);
   const [hotLeads, setHotLeads] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [quota, setQuota] = useState({ sent: 0, limit: 50 });
