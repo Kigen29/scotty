@@ -19,8 +19,9 @@ Deno.serve(async (req) => {
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!FIRECRAWL_API_KEY || !LOVABLE_API_KEY) {
-      throw new Error("Missing required API keys");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!LOVABLE_API_KEY && !OPENAI_API_KEY) {
+      throw new Error("Missing AI API keys (LOVABLE_API_KEY or OPENAI_API_KEY)");
     }
 
     let usersToProcess: any[] = [];
