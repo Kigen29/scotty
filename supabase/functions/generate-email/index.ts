@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    const { lead_id, template_type = "first_touch" } = await req.json();
+    const { lead_id, template_type = "first_touch", ab_test = false } = await req.json();
 
     if (!lead_id) {
       return new Response(JSON.stringify({ error: "lead_id is required" }), {
