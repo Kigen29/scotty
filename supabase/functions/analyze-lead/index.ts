@@ -6,6 +6,55 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function computeICPScore(lead: any, icp: any): number {
+  let score = 0;
+  let maxScore = 0;
+
+  // Industry match
+  const wIndustry = icp.weight_industry || 3;
+  maxScore += wIndustry;
+  if (icp.industries?.length && lead.category) {
+    const cat = lead.category.toLowerCase();
+    if (icp.industries.some((ind: string) => cat.includes(ind.toLowerCase()) || ind.toLowerCase().includes(cat))) {
+      score += wIndustry;
+    }
+  } else if (!icp.industries?.length) {
+    score += wIndustry; // no preference = full score
+  }
+
+  // Location match
+  const wLocation = icp.weight_location || 2;
+  maxScore += wLocation;
+  if (icp.locations?.length && lead.location) {
+    const loc = lead.location.toLowerCase();
+    if (icp.locations.some((l: string) => loc.includes(l.toLowerCase()) || l.toLowerCase().includes(loc))) {
+      score += wLocation;
+    }
+  } else if (!icp.locations?.length) {
+    score += wLocation;
+  }
+
+  // No website
+  const wNoWebsite = icp.weight_no_website || 4;
+  maxScore += wNoWebsite;
+  const pref = icp.has_website_preference || "no_website";
+  if (pref === "no_website" && !lead.has_website) {
+    score += wNoWebsite;
+  } else if (pref === "poor_website") {
+    score += lead.has_website ? Math.floor(wNoWebsite * 0.7) : wNoWebsite;
+  } else if (pref === "any") {
+    score += wNoWebsite;
+  }
+
+  // Has email
+  const wEmail = icp.weight_has_email || 3;
+  maxScore += wEmail;
+  if (lead.email) score += wEmail;
+
+  // Normalize to 1-10
+  return maxScore > 0 ? Math.max(1, Math.round((score / maxScore) * 10)) : 5;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -43,14 +92,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fetch user settings for portfolio projects
-    const { data: settings } = await supabase
-      .from("settings")
-      .select("portfolio_projects")
-      .eq("user_id", user_id)
-      .maybeSingle();
+    // Fetch user settings and active ICP in parallel
+    const [settingsRes, icpRes] = await Promise.all([
+      supabase.from("settings").select("portfolio_projects").eq("user_id", user_id).maybeSingle(),
+      supabase.from("icp_profiles").select("*").eq("user_id", user_id).eq("is_active", true).maybeSingle(),
+    ]);
 
-    const portfolioProjects = settings?.portfolio_projects || [];
+    const portfolioProjects = settingsRes.data?.portfolio_projects || [];
+    const icpProfile = icpRes.data;
+
+    // Compute ICP score if profile exists
+    let icpScore: number | null = null;
+    if (icpProfile) {
+      icpScore = computeICPScore(lead, icpProfile);
+    }
 
     // Optionally scrape the lead's URL for more context
     let scrapedContent = "";
@@ -88,6 +143,7 @@ Website URL: ${lead.website_url || "None"}
 Email: ${lead.email || "None"}
 Phone: ${lead.phone || "None"}
 Notes: ${lead.notes || "None"}
+${icpScore !== null ? `ICP Match Score: ${icpScore}/10` : ""}
 
 ${scrapedContent ? `Scraped website content:\n${scrapedContent}` : ""}
 
@@ -174,14 +230,19 @@ Provide:
 
     const analysis = JSON.parse(toolCall.function.arguments);
 
-    // Update lead with analysis
-    await supabase.from("leads").update({
+    // Update lead with analysis + ICP score
+    const updatePayload: any = {
       analysis,
       priority_score: Math.min(10, Math.max(1, analysis.priority_score || 5)),
-    }).eq("id", lead_id);
+    };
+    if (icpScore !== null) {
+      updatePayload.icp_score = icpScore;
+    }
+
+    await supabase.from("leads").update(updatePayload).eq("id", lead_id);
 
     return new Response(
-      JSON.stringify({ success: true, analysis }),
+      JSON.stringify({ success: true, analysis, icp_score: icpScore }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
