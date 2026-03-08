@@ -523,8 +523,13 @@ const LeadDiscovery = () => {
                         </Button>
                       )}
                       {!lead.analysis && (
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" title="Analyze" onClick={() => analyzeLead(lead.id)}>
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => analyzeLead(lead.id)}>
                           <Brain className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {!(lead.analysis as any)?.enrichment && (
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => enrichLeads([lead.id])} disabled={enriching === lead.id}>
+                          {enriching === lead.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                         </Button>
                       )}
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => openExternal(getProfileUrl(lead))}>
