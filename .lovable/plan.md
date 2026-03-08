@@ -1,89 +1,56 @@
 
 
-# Comprehensive UI/UX Overhaul Plan
+## Plan: Fix Pipeline Routing and Add OpenAI Pipeline Option
 
-## Critical Bug Fix
+### Root Cause
 
-**The "View Profile" ERR_BLOCKED_BY_RESPONSE error**: The `getProfileUrl` function falls back to `https://www.google.com/search?q=...` which gets blocked in iframe/preview. Fix: use `window.open()` (already done) but the real issue is that the Google search URL gets blocked by Google's X-Frame-Options. Solution: keep using `window.open()` but ensure the click handler is working correctly, and also provide a better fallback than Google Search (e.g., show the lead detail sheet instead of trying to open an external link when no social links exist).
+The manual "Discover Leads" button on the Lead Discovery page calls `discover-leads` edge function directly, which **never checks the user's `discovery_pipeline` setting**. It always tries Firecrawl first, regardless of what you chose in Settings. The `auto-discover` function (cron job) does check the setting, but `discover-leads` (manual trigger) does not.
 
-**The team_members → profiles FK error**: Network requests show `PGRST200` - "Could not find a relationship between 'team_members' and 'profiles'". The `useTeam` hook queries `profiles(display_name, email)` via a join, but there's no foreign key from `team_members.user_id` to `profiles.id`. Fix: add a migration to create the FK relationship.
+Additionally, `discover-leads/index.ts` has a **duplicate variable declaration** (`FIRECRAWL_API_KEY` on lines 51 and 62) which would cause a runtime error.
 
-## Architecture: Settings Page Restructuring
+---
 
-Break the monolithic Settings page into a tabbed layout with sub-sections:
+### Changes
 
-| Tab | Contents |
-|-----|----------|
-| **Profile** | Name, website, services, portfolio links, email signature |
-| **Portfolio** | Portfolio projects (AI references) |
-| **Discovery** | Discovery pipeline selection, ICP profile, target categories/locations |
-| **Email & Channels** | Sender email, daily limit, WhatsApp, social discovery toggle, booking link |
-| **Automation** | Autonomous mode, active hours, follow-up intervals |
-| **Team** | Team management (existing TeamSettings component) |
+#### 1. Fix `discover-leads` to respect pipeline setting
 
-## Layout & Navigation Overhaul
+Rewrite `supabase/functions/discover-leads/index.ts`:
+- Remove the duplicate `FIRECRAWL_API_KEY` declaration
+- After authenticating the user, fetch their `settings` row and read `discovery_pipeline`
+- If `lovable_ai`: skip Firecrawl entirely, use the AI-only prompt (existing fallback path)
+- If `openai`: use the OpenAI API key from secrets with the same discovery prompt
+- If `firecrawl` (default): use current Firecrawl logic with AI fallback
 
-### Top Header Bar (new)
-- Add a persistent top header across all pages with:
-  - Page title (left)
-  - Search bar (center, optional)
-  - Notification bell (moved from sidebar)
-  - Profile avatar dropdown (right) with: user email, sign out, link to settings
+#### 2. Add OpenAI pipeline option
 
-### Sidebar Improvements
-- Increase font size from `text-[13px]` to `text-sm` (14px)
-- Increase font weight for inactive items
-- Increase sidebar foreground contrast: change `--sidebar-foreground` from `220 10% 75%` (dark) / `220 10% 85%` (light) to higher contrast values
-- Move notification bell and sign-out from sidebar footer to top header
-- Keep sidebar clean: only navigation items
+**Database**: Add no schema changes needed -- `discovery_pipeline` is already a `text` column, so it can store `'openai'` as a value.
 
-## Lead Discovery UX Improvements
+**New secret**: Use the `add_secret` tool to request the user's OpenAI API key (`OPENAI_API_KEY`).
 
-1. **Date filter**: Add a DateFilter component (already exists and is used in Campaigns/Conversations/Reports) to the Lead Discovery filter bar
-2. **Fix "View Profile" button**: When no social links exist, instead of falling back to a blocked Google search URL, show a toast saying "No external profile available" or construct a Google Maps search URL instead (which doesn't block in iframes)
-3. **Better empty states**: More descriptive empty states with illustrations
+**Edge functions** -- Update both `discover-leads` and `auto-discover` to handle `pipeline === 'openai'`:
+- Call `https://api.openai.com/v1/chat/completions` directly with the user's OpenAI API key
+- Use `gpt-4o-mini` as the default model (cost-effective for extraction)
+- Same tool-calling schema and prompts as the Lovable AI path, just different endpoint and auth
 
-## Per-Page UI Polish
+#### 3. Update Settings UI
 
-### All Pages
-- Consistent page header pattern with breadcrumb-style subtitle
-- Better spacing and visual hierarchy
-- Cards with subtle hover effects
+Add a third radio option in the Discovery Pipeline card:
+- **Firecrawl** -- Web scraping via Firecrawl API
+- **Lovable AI** -- Uses built-in AI gateway (no extra keys needed)
+- **OpenAI** -- Uses your own OpenAI API key (GPT-4o-mini)
 
-### Dashboard
-- Add greeting with user's name ("Good morning, Emmanuel")
-- Better card shadows and hover states
+#### 4. Update `auto-discover` routing
 
-### Sidebar
-- Higher contrast text colors
-- Slightly larger icons (h-4.5 w-4.5 equivalent)
-- Better active state indicator (left border accent instead of just background)
+Add `openai` case alongside the existing `lovable_ai` case. For OpenAI, run the same logic as `ai-discover` but swap the API endpoint and key.
 
-## Database Migration
+---
 
-Add FK from `team_members.user_id` to `profiles.id`:
+### Files to Modify
 
-```sql
-ALTER TABLE public.team_members
-  ADD CONSTRAINT team_members_user_id_profiles_fkey
-  FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
-```
-
-## Files to Create/Edit
-
-1. **Migration**: Add FK constraint for team_members → profiles
-2. **`src/components/AppLayout.tsx`**: Add top header bar with profile dropdown, improve sidebar text contrast/size, move notification bell to header
-3. **`src/components/ProfileDropdown.tsx`** (new): Avatar dropdown with user info and sign out
-4. **`src/pages/SettingsPage.tsx`**: Restructure into tabbed layout with 6 sub-sections
-5. **`src/pages/LeadDiscovery.tsx`**: Add DateFilter, fix getProfileUrl fallback
-6. **`src/pages/Dashboard.tsx`**: Add user greeting
-7. **`src/index.css`**: Increase sidebar foreground contrast values
-
-## Summary of Changes
-
-- **Bug fixes**: FK relationship for team queries, Google search URL blocking
-- **Settings**: Split into 6 organized tabs
-- **Navigation**: Profile icon in top-right header, better sidebar readability
-- **Lead Discovery**: Date filtering, safer external link handling
-- **Visual**: Higher contrast sidebar text, better spacing, consistent headers
+| File | Change |
+|---|---|
+| `supabase/functions/discover-leads/index.ts` | Fix duplicate var, add pipeline routing (read settings, branch on firecrawl/lovable_ai/openai) |
+| `supabase/functions/auto-discover/index.ts` | Add `openai` pipeline routing case |
+| `supabase/functions/ai-discover/index.ts` | Add optional OpenAI mode (accept `pipeline` param in body) |
+| `src/pages/SettingsPage.tsx` | Add third "OpenAI" radio option with key icon |
 

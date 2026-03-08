@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { DateFilter, type DateRange } from "@/components/DateFilter";
 import {
   Search, Globe, Phone, Mail, MapPin, CheckCircle2, X, Loader2, Star, Brain,
   ExternalLink, ChevronUp, ChevronDown, Users, Filter, ArrowUpDown, Trash2, Cpu, Zap, Flame,
@@ -61,6 +62,7 @@ const LeadDiscovery = () => {
   const [filterLocation, setFilterLocation] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterHasEmail, setFilterHasEmail] = useState(false);
+  const [filterDateRange, setFilterDateRange] = useState<DateRange | null>(null);
 
   // Sort
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
@@ -250,6 +252,12 @@ const LeadDiscovery = () => {
     if (filterLocation !== "all") result = result.filter((l) => l.location === filterLocation);
     if (filterStatus !== "all") result = result.filter((l) => l.status === filterStatus);
     if (filterHasEmail) result = result.filter((l) => l.email);
+    if (filterDateRange) {
+      result = result.filter((l) => {
+        const d = new Date(l.created_at);
+        return d >= filterDateRange.from && d <= filterDateRange.to;
+      });
+    }
 
     result = [...result].sort((a, b) => {
       let av = a[sortKey] ?? "";
@@ -288,14 +296,24 @@ const LeadDiscovery = () => {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const getProfileUrl = (lead: any): string => {
+  const getProfileUrl = (lead: any): string | null => {
     const social = lead.social_links as any;
     return (
       social?.google_maps ||
       social?.instagram ||
       social?.tiktok ||
-      `https://www.google.com/search?q=${encodeURIComponent(`${lead.business_name} ${lead.location || ""} Kenya`)}`
+      null
     );
+  };
+
+  const handleViewProfile = (lead: any) => {
+    const url = getProfileUrl(lead);
+    if (url) {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else {
+      // Open the lead detail sheet instead
+      setDetailLead(lead);
+    }
   };
 
   return (
@@ -351,6 +369,9 @@ const LeadDiscovery = () => {
           <CheckCircle2 className="h-4 w-4" /> <span className="font-semibold text-foreground">{qualified}</span> qualified
         </div>
       </div>
+
+      {/* Date filter */}
+      <DateFilter defaultPreset="all" onChange={(range) => { setFilterDateRange(range); setPage(0); }} />
 
       {/* Filter bar */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -532,7 +553,7 @@ const LeadDiscovery = () => {
                           {enriching === lead.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                         </Button>
                       )}
-                      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => openExternal(getProfileUrl(lead))}>
+                      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => handleViewProfile(lead)}>
                         <ExternalLink className="h-3.5 w-3.5" />
                       </Button>
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={() => deleteLead(lead.id)}>
@@ -705,7 +726,7 @@ const LeadDiscovery = () => {
                 {/* Actions */}
                 <div className="flex flex-col gap-2 pt-2">
                   <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1" onClick={() => openExternal(getProfileUrl(detailLead))}>
+                    <Button variant="outline" className="flex-1" onClick={() => handleViewProfile(detailLead)}>
                       <ExternalLink className="h-4 w-4 mr-2" /> View Profile
                     </Button>
                     {!(detailLead.analysis as any)?.enrichment && (

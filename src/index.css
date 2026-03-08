@@ -35,11 +35,11 @@
     --radius: 0.75rem;
 
     --sidebar-background: 220 25% 10%;
-    --sidebar-foreground: 220 10% 85%;
+    --sidebar-foreground: 220 15% 92%;
     --sidebar-primary: 152 60% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 220 20% 16%;
-    --sidebar-accent-foreground: 220 10% 85%;
+    --sidebar-accent-foreground: 220 15% 92%;
     --sidebar-border: 220 20% 18%;
     --sidebar-ring: 152 60% 50%;
 
@@ -87,11 +87,11 @@
     --ring: 152 60% 50%;
 
     --sidebar-background: 224 28% 6%;
-    --sidebar-foreground: 220 10% 75%;
+    --sidebar-foreground: 220 15% 88%;
     --sidebar-primary: 152 60% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 224 22% 12%;
-    --sidebar-accent-foreground: 220 10% 85%;
+    --sidebar-accent-foreground: 220 15% 88%;
     --sidebar-border: 224 22% 14%;
     --sidebar-ring: 152 60% 50%;
 

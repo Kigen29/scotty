@@ -134,10 +134,19 @@ const Dashboard = () => {
     return `${Math.floor(hrs / 24)}d ago`;
   };
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
+  };
+
+  const displayName = user?.email?.split("@")[0] || "";
+
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <h1 className="text-2xl font-bold">{getGreeting()}, {displayName} 👋</h1>
         <p className="text-sm text-muted-foreground">Your lead generation pipeline at a glance</p>
       </div>
 
