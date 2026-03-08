@@ -427,6 +427,88 @@ const Sequences = () => {
     }
   };
 
+  // Bulk enrollment
+  const openEnrollDialog = async (seqId: string) => {
+    if (!user) return;
+    setEnrollSeqId(seqId);
+    setSelectedLeadIds(new Set());
+    setLeadSearch("");
+    setLeadsLoading(true);
+
+    // Get already enrolled lead IDs for this sequence
+    const { data: existing } = await supabase
+      .from("sequence_enrollments")
+      .select("lead_id")
+      .eq("sequence_id", seqId)
+      .eq("user_id", user.id)
+      .in("status", ["active", "paused"]);
+
+    const enrolledIds = new Set((existing || []).map((e) => e.lead_id));
+
+    // Get all leads with email
+    const { data: leads } = await supabase
+      .from("leads")
+      .select("id, business_name, email, location")
+      .eq("user_id", user.id)
+      .not("email", "is", null)
+      .eq("unsubscribed", false)
+      .order("created_at", { ascending: false });
+
+    setAvailableLeads(
+      (leads || []).filter((l) => !enrolledIds.has(l.id))
+    );
+    setLeadsLoading(false);
+  };
+
+  const enrollLeads = async () => {
+    if (!user || !enrollSeqId || selectedLeadIds.size === 0) return;
+    setEnrolling(true);
+    try {
+      const rows = Array.from(selectedLeadIds).map((lead_id) => ({
+        user_id: user.id,
+        sequence_id: enrollSeqId,
+        lead_id,
+        current_step: 0,
+        status: "active" as const,
+        next_step_at: new Date().toISOString(),
+      }));
+
+      const { error } = await supabase.from("sequence_enrollments").insert(rows);
+      if (error) throw error;
+
+      toast({ title: `${selectedLeadIds.size} lead${selectedLeadIds.size > 1 ? "s" : ""} enrolled!` });
+      setEnrollSeqId(null);
+      setSelectedLeadIds(new Set());
+    } catch (error: any) {
+      toast({ title: "Enrollment failed", description: error.message, variant: "destructive" });
+    } finally {
+      setEnrolling(false);
+    }
+  };
+
+  const filteredLeads = availableLeads.filter((l) => {
+    if (!leadSearch) return true;
+    const q = leadSearch.toLowerCase();
+    return l.business_name.toLowerCase().includes(q) || l.email?.toLowerCase().includes(q) || l.location?.toLowerCase().includes(q);
+  });
+
+  const toggleLead = (id: string) => {
+    setSelectedLeadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedLeadIds.size === filteredLeads.length) {
+      setSelectedLeadIds(new Set());
+    } else {
+      setSelectedLeadIds(new Set(filteredLeads.map((l) => l.id)));
+    }
+  };
+
   // Builder view
   if (editing) {
     return (
