@@ -504,6 +504,7 @@ const Sequences = () => {
       toast({ title: `${selectedLeadIds.size} lead${selectedLeadIds.size > 1 ? "s" : ""} enrolled!` });
       setEnrollSeqId(null);
       setSelectedLeadIds(new Set());
+      fetchEnrollmentCounts();
     } catch (error: any) {
       toast({ title: "Enrollment failed", description: error.message, variant: "destructive" });
     } finally {
