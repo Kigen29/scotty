@@ -4,13 +4,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useTeam } from "@/hooks/useTeam";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
-import { Star, Mail, Phone, MapPin, Globe, Search, X } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Star, Mail, Phone, MapPin, Globe, Search, X, UserCircle } from "lucide-react";
 import KanbanColumn from "@/components/pipeline/KanbanColumn";
 
 const STAGES = [
