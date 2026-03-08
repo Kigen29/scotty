@@ -42,6 +42,38 @@ const defaultStep: SequenceStep = {
   channel: "email",
 };
 
+const PRESET_TEMPLATES = [
+  {
+    name: "Cold Outreach",
+    icon: Send,
+    description: "Initial contact with new prospects",
+    steps: [
+      { subject: "Quick question about {{business_name}}", body_prompt: "Introduce yourself briefly, mention you noticed {{business_name}} in {{location}} and that they could benefit from your services. Keep it short and end with a simple question.", delay_days: 0, channel: "email" as const },
+      { subject: "Following up — {{business_name}}", body_prompt: "Reference the first email, add a specific value proposition relevant to {{category}} businesses. Mention a quick win or case study.", delay_days: 3, channel: "email" as const },
+      { subject: "Last note for {{business_name}}", body_prompt: "Final follow-up. Be direct about the value you can provide. Include a clear call to action with a specific time to chat. Create mild urgency without being pushy.", delay_days: 4, channel: "email" as const },
+    ],
+  },
+  {
+    name: "Follow-up Nurture",
+    icon: RotateCcw,
+    description: "Re-engage leads who went quiet",
+    steps: [
+      { subject: "Checking in — {{business_name}}", body_prompt: "Warm re-engagement email. Reference previous contact, share something new or valuable (tip, resource, industry insight) relevant to {{category}}.", delay_days: 0, channel: "email" as const },
+      { subject: "Thought you'd find this useful", body_prompt: "Share a relevant case study or success story from a similar {{category}} business. Make it about them, not you.", delay_days: 5, channel: "email" as const },
+    ],
+  },
+  {
+    name: "Re-engagement",
+    icon: UserPlus,
+    description: "Win back cold or lost leads",
+    steps: [
+      { subject: "It's been a while, {{business_name}}", body_prompt: "Acknowledge the gap since last contact. Share what's changed or improved in your offering that's relevant to {{category}} businesses in {{location}}.", delay_days: 0, channel: "email" as const },
+      { subject: "New opportunity for {{business_name}}", body_prompt: "Present a fresh angle or limited-time offer. Reference their specific situation and why now is a good time to reconnect.", delay_days: 4, channel: "email" as const },
+      { subject: "Moving on — unless you're interested?", body_prompt: "Breakup email. Let them know you won't follow up again unless they're interested. Simple yes/no CTA. Often gets the highest response rate.", delay_days: 5, channel: "email" as const },
+    ],
+  },
+];
+
 const Sequences = () => {
   const { user } = useAuth();
   const { toast } = useToast();
