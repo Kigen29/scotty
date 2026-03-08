@@ -137,10 +137,30 @@ const Sequences = () => {
   const [enrollments, setEnrollments] = useState<{ id: string; lead_id: string; status: string; current_step: number; business_name: string; email: string | null }[]>([]);
   const [enrollmentsLoading, setEnrollmentsLoading] = useState(false);
 
+  // Enrollment counts per sequence
+  const [enrollmentCounts, setEnrollmentCounts] = useState<Record<string, number>>({});
+
+  const fetchEnrollmentCounts = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("sequence_enrollments")
+      .select("sequence_id, status")
+      .eq("user_id", user.id)
+      .in("status", ["active", "paused"]);
+    if (data) {
+      const counts: Record<string, number> = {};
+      data.forEach((e) => {
+        counts[e.sequence_id] = (counts[e.sequence_id] || 0) + 1;
+      });
+      setEnrollmentCounts(counts);
+    }
+  };
+
   useEffect(() => {
     if (user) {
       fetchSequences();
       fetchSavedTemplates();
+      fetchEnrollmentCounts();
     }
   }, [user]);
 
