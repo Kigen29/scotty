@@ -168,6 +168,27 @@ const LeadDiscovery = () => {
     }
   };
 
+  const enrichLeads = async (leadIds?: string[]) => {
+    const ids = leadIds || Array.from(selected);
+    if (ids.length === 0) {
+      toast({ title: "Select leads to enrich", variant: "destructive" });
+      return;
+    }
+    setEnriching(leadIds?.length === 1 ? leadIds[0] : "bulk");
+    try {
+      const { data, error } = await supabase.functions.invoke("enrich-lead", {
+        body: { lead_ids: ids.slice(0, 10) },
+      });
+      if (error) throw error;
+      toast({ title: "Enrichment complete", description: `${data.enriched} of ${data.total} leads enriched` });
+      fetchLeads();
+    } catch (error: any) {
+      toast({ title: "Enrichment failed", description: error.message, variant: "destructive" });
+    } finally {
+      setEnriching(null);
+    }
+  };
+
   const verifyEmails = async (leadIds?: string[]) => {
     const ids = leadIds || Array.from(selected);
     const withEmail = ids.length > 0
