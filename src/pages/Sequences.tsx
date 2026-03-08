@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Trash2, GripVertical, Mail, Clock, ArrowDown, Zap,
-  ChevronDown, ChevronUp, Sparkles, Loader2, Wand2, RotateCcw, Send, UserPlus,
+  ChevronDown, ChevronUp, Sparkles, Loader2, Wand2, RotateCcw,
+  Send, UserPlus, Bookmark, BarChart3, Eye, Reply,
 } from "lucide-react";
 import {
   Select,
@@ -20,6 +22,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 interface SequenceStep {
   subject: string;
@@ -33,6 +42,20 @@ interface Sequence {
   name: string;
   steps: SequenceStep[];
   is_active: boolean;
+}
+
+interface SavedTemplate {
+  id: string;
+  name: string;
+  description: string;
+  steps: SequenceStep[];
+}
+
+interface StepAnalytics {
+  step_index: number;
+  sent: number;
+  opened: number;
+  replied: number;
 }
 
 const defaultStep: SequenceStep = {
@@ -89,8 +112,23 @@ const Sequences = () => {
   const [aiGenerating, setAiGenerating] = useState(false);
   const [refiningStep, setRefiningStep] = useState<number | null>(null);
 
+  // Templates state
+  const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([]);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDesc, setTemplateDesc] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  // Analytics state
+  const [analyticsSeqId, setAnalyticsSeqId] = useState<string | null>(null);
+  const [stepAnalytics, setStepAnalytics] = useState<StepAnalytics[]>([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
   useEffect(() => {
-    if (user) fetchSequences();
+    if (user) {
+      fetchSequences();
+      fetchSavedTemplates();
+    }
   }, [user]);
 
   const fetchSequences = async () => {
@@ -108,6 +146,26 @@ const Sequences = () => {
           name: s.name,
           steps: (s.steps as any as SequenceStep[]) || [],
           is_active: s.is_active,
+        }))
+      );
+    }
+  };
+
+  const fetchSavedTemplates = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("sequence_templates")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (data) {
+      setSavedTemplates(
+        data.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          description: t.description || "",
+          steps: (t.steps as any as SequenceStep[]) || [],
         }))
       );
     }
@@ -256,6 +314,111 @@ const Sequences = () => {
     }
   };
 
+  // Save as template
+  const saveAsTemplate = async () => {
+    if (!user || !editing || !templateName.trim()) {
+      toast({ title: "Template name required", variant: "destructive" });
+      return;
+    }
+    setSavingTemplate(true);
+    try {
+      const { error } = await supabase.from("sequence_templates").insert({
+        user_id: user.id,
+        name: templateName,
+        description: templateDesc,
+        steps: editing.steps as any,
+      });
+      if (error) throw error;
+      toast({ title: "Template saved!" });
+      setSaveTemplateOpen(false);
+      setTemplateName("");
+      setTemplateDesc("");
+      fetchSavedTemplates();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
+  const deleteTemplate = async (id: string) => {
+    const { error } = await supabase.from("sequence_templates").delete().eq("id", id);
+    if (!error) {
+      toast({ title: "Template deleted" });
+      fetchSavedTemplates();
+    }
+  };
+
+  // Analytics
+  const fetchAnalytics = async (seqId: string, stepCount: number) => {
+    if (!user) return;
+    setAnalyticsSeqId(seqId);
+    setAnalyticsLoading(true);
+    try {
+      // Get enrollments for this sequence
+      const { data: enrollments } = await supabase
+        .from("sequence_enrollments")
+        .select("lead_id, current_step")
+        .eq("sequence_id", seqId)
+        .eq("user_id", user.id);
+
+      if (!enrollments?.length) {
+        setStepAnalytics(
+          Array.from({ length: stepCount }, (_, i) => ({ step_index: i, sent: 0, opened: 0, replied: 0 }))
+        );
+        setAnalyticsLoading(false);
+        return;
+      }
+
+      const leadIds = enrollments.map((e) => e.lead_id);
+
+      // Get campaigns for these leads
+      const { data: campaigns } = await supabase
+        .from("email_campaigns")
+        .select("lead_id, status, sent_at, opened_at, template_type")
+        .eq("user_id", user.id)
+        .in("lead_id", leadIds);
+
+      // Get conversations (replies) for these leads
+      const { data: replies } = await supabase
+        .from("conversations")
+        .select("lead_id")
+        .eq("user_id", user.id)
+        .eq("direction", "inbound")
+        .in("lead_id", leadIds);
+
+      const replyLeadIds = new Set(replies?.map((r) => r.lead_id) || []);
+
+      // Build per-step analytics based on enrollment progress
+      const analytics: StepAnalytics[] = Array.from({ length: stepCount }, (_, i) => {
+        // Leads that reached at least this step
+        const reachedLeads = enrollments.filter((e) => e.current_step >= i);
+        const reachedLeadIds = reachedLeads.map((e) => e.lead_id);
+
+        const stepCampaigns = campaigns?.filter((c) => reachedLeadIds.includes(c.lead_id)) || [];
+        // Approximate: distribute campaigns across steps by order
+        const sentCount = reachedLeads.length;
+        const openedCount = stepCampaigns.filter((c) => c.opened_at).length;
+        const repliedCount = reachedLeadIds.filter((id) => replyLeadIds.has(id)).length;
+
+        return {
+          step_index: i,
+          sent: sentCount,
+          opened: Math.min(openedCount, sentCount),
+          replied: Math.min(repliedCount, sentCount),
+        };
+      });
+
+      setStepAnalytics(analytics);
+    } catch {
+      setStepAnalytics(
+        Array.from({ length: stepCount }, (_, i) => ({ step_index: i, sent: 0, opened: 0, replied: 0 }))
+      );
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
   // Builder view
   if (editing) {
     return (
@@ -269,6 +432,17 @@ const Sequences = () => {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => { setEditing(null); setShowAiForm(false); }}>Cancel</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setTemplateName(editing.name);
+                setSaveTemplateOpen(true);
+              }}
+              disabled={editing.steps.length === 0}
+            >
+              <Bookmark className="h-3.5 w-3.5 mr-1" /> Save as Template
+            </Button>
             <Button size="sm" onClick={saveSequence} disabled={loading}>
               {loading ? "Saving..." : "Save Sequence"}
             </Button>
@@ -277,69 +451,69 @@ const Sequences = () => {
 
         {/* AI Generate Section */}
         <div>
-            {!showAiForm ? (
-              <Button
-                variant="outline"
-                className="w-full border-dashed border-primary/40 text-primary hover:bg-primary/5"
-                onClick={() => setShowAiForm(true)}
-              >
-                <Wand2 className="h-4 w-4 mr-2" />
-                Generate with AI
-              </Button>
-            ) : (
-              <Card className="border-primary/30 bg-primary/5">
-                <CardContent className="pt-4 space-y-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium">AI Sequence Generator</span>
-                  </div>
+          {!showAiForm ? (
+            <Button
+              variant="outline"
+              className="w-full border-dashed border-primary/40 text-primary hover:bg-primary/5"
+              onClick={() => setShowAiForm(true)}
+            >
+              <Wand2 className="h-4 w-4 mr-2" />
+              {editing.id ? "Regenerate with AI" : "Generate with AI"}
+            </Button>
+          ) : (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">AI Sequence Generator</span>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Describe your outreach goal</Label>
+                  <Input
+                    value={aiGoal}
+                    onChange={(e) => setAiGoal(e.target.value)}
+                    placeholder="e.g. Cold outreach to restaurants without websites, offering web design services"
+                    className="h-9 text-xs"
+                    disabled={aiGenerating}
+                  />
+                </div>
+                <div className="flex items-end gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Describe your outreach goal</Label>
-                    <Input
-                      value={aiGoal}
-                      onChange={(e) => setAiGoal(e.target.value)}
-                      placeholder="e.g. Cold outreach to restaurants without websites, offering web design services"
-                      className="h-9 text-xs"
-                      disabled={aiGenerating}
-                    />
+                    <Label className="text-xs">Number of steps</Label>
+                    <Select value={aiStepCount} onValueChange={setAiStepCount} disabled={aiGenerating}>
+                      <SelectTrigger className="w-20 h-9 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[2, 3, 4, 5].map((n) => (
+                          <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="flex items-end gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Number of steps</Label>
-                      <Select value={aiStepCount} onValueChange={setAiStepCount} disabled={aiGenerating}>
-                        <SelectTrigger className="w-20 h-9 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[2, 3, 4, 5].map((n) => (
-                            <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={generateWithAi} disabled={aiGenerating} className="h-9">
-                        {aiGenerating ? (
-                          <>
-                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                            Generate
-                          </>
-                        )}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setShowAiForm(false)} disabled={aiGenerating} className="h-9">
-                        Cancel
-                      </Button>
-                    </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={generateWithAi} disabled={aiGenerating} className="h-9">
+                      {aiGenerating ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                          Generate
+                        </>
+                      )}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setShowAiForm(false)} disabled={aiGenerating} className="h-9">
+                      Cancel
+                    </Button>
                   </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
         <div className="flex items-center gap-4">
           <div className="flex-1 space-y-1.5">
@@ -446,7 +620,7 @@ const Sequences = () => {
                       <Textarea
                         value={step.body_prompt}
                         onChange={(e) => updateStep(i, "body_prompt", e.target.value)}
-                        placeholder="Describe what this email should say. AI will personalize it per lead. e.g. 'Introduce yourself, mention their business has no website, reference a portfolio project in the same industry.'"
+                        placeholder="Describe what this email should say. AI will personalize it per lead."
                         rows={4}
                         className="text-xs"
                       />
@@ -462,13 +636,52 @@ const Sequences = () => {
             <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Step
           </Button>
         </div>
+
+        {/* Save as Template Dialog */}
+        <Dialog open={saveTemplateOpen} onOpenChange={setSaveTemplateOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Save as Template</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Template Name</Label>
+                <Input
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="e.g. My Winning Cold Outreach"
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Description (optional)</Label>
+                <Input
+                  value={templateDesc}
+                  onChange={(e) => setTemplateDesc(e.target.value)}
+                  placeholder="What's this template good for?"
+                  className="h-9"
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {editing.steps.length} step{editing.steps.length !== 1 ? "s" : ""} will be saved
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setSaveTemplateOpen(false)}>Cancel</Button>
+              <Button size="sm" onClick={saveAsTemplate} disabled={savingTemplate}>
+                {savingTemplate ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Bookmark className="h-3.5 w-3.5 mr-1" />}
+                {savingTemplate ? "Saving..." : "Save Template"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
 
   // List view
   return (
-    <div className="p-6 space-y-4 max-w-4xl">
+    <div className="p-6 space-y-6 max-w-4xl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Sequences</h1>
@@ -482,7 +695,7 @@ const Sequences = () => {
         </Button>
       </div>
 
-      {/* Preset Templates */}
+      {/* Preset & Custom Templates */}
       <div>
         <h2 className="text-sm font-medium mb-2">Start from a template</h2>
         <div className="grid grid-cols-3 gap-3">
@@ -505,9 +718,34 @@ const Sequences = () => {
               </Card>
             );
           })}
+          {savedTemplates.map((tpl) => (
+            <Card
+              key={tpl.id}
+              className="cursor-pointer hover:border-primary/40 transition-colors relative group"
+              onClick={() => setEditing({ name: tpl.name, steps: tpl.steps, is_active: true })}
+            >
+              <CardContent className="p-3 space-y-1">
+                <div className="flex items-center gap-2">
+                  <Bookmark className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium truncate">{tpl.name}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground line-clamp-1">{tpl.description || "Custom template"}</p>
+                <p className="text-[10px] text-muted-foreground/70">{tpl.steps.length} steps</p>
+              </CardContent>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 text-destructive"
+                onClick={(e) => { e.stopPropagation(); deleteTemplate(tpl.id); }}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </Card>
+          ))}
         </div>
       </div>
 
+      {/* Sequences List */}
       {sequences.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
@@ -524,32 +762,95 @@ const Sequences = () => {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3">
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium">Your Sequences</h2>
           {sequences.map((seq) => (
-            <Card key={seq.id} className="hover:border-primary/30 transition-colors cursor-pointer" onClick={() => setEditing(seq)}>
-              <CardContent className="flex items-center justify-between p-4">
-                <div className="flex items-center gap-3">
-                  <div className={`h-2 w-2 rounded-full ${seq.is_active ? "bg-emerald-500" : "bg-muted-foreground/30"}`} />
-                  <div>
-                    <h3 className="text-sm font-medium">{seq.name}</h3>
-                    <p className="text-xs text-muted-foreground">{seq.steps.length} step{seq.steps.length !== 1 ? "s" : ""}</p>
+            <div key={seq.id}>
+              <Card className="hover:border-primary/30 transition-colors">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between cursor-pointer" onClick={() => setEditing(seq)}>
+                    <div className="flex items-center gap-3">
+                      <div className={`h-2 w-2 rounded-full ${seq.is_active ? "bg-emerald-500" : "bg-muted-foreground/30"}`} />
+                      <div>
+                        <h3 className="text-sm font-medium">{seq.name}</h3>
+                        <p className="text-xs text-muted-foreground">{seq.steps.length} step{seq.steps.length !== 1 ? "s" : ""}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-[10px]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (analyticsSeqId === seq.id) {
+                            setAnalyticsSeqId(null);
+                          } else {
+                            fetchAnalytics(seq.id, seq.steps.length);
+                          }
+                        }}
+                      >
+                        <BarChart3 className="h-3.5 w-3.5 mr-1" />
+                        Analytics
+                      </Button>
+                      <Badge variant={seq.is_active ? "default" : "secondary"} className="text-[10px]">
+                        {seq.is_active ? "Active" : "Paused"}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={(e) => { e.stopPropagation(); deleteSequence(seq.id); }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={seq.is_active ? "default" : "secondary"} className="text-[10px]">
-                    {seq.is_active ? "Active" : "Paused"}
-                  </Badge>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive"
-                    onClick={(e) => { e.stopPropagation(); deleteSequence(seq.id); }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+
+                  {/* Inline Analytics */}
+                  {analyticsSeqId === seq.id && (
+                    <div className="mt-3 pt-3 border-t border-border space-y-2">
+                      {analyticsLoading ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground ml-2">Loading analytics...</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-x-4 gap-y-2 text-[11px]">
+                            <div className="font-medium text-muted-foreground">Step</div>
+                            <div className="font-medium text-muted-foreground flex items-center gap-1"><Send className="h-3 w-3" /> Sent</div>
+                            <div className="font-medium text-muted-foreground flex items-center gap-1"><Eye className="h-3 w-3" /> Opened</div>
+                            <div className="font-medium text-muted-foreground flex items-center gap-1"><Reply className="h-3 w-3" /> Replied</div>
+                            {stepAnalytics.map((sa) => {
+                              const openRate = sa.sent > 0 ? Math.round((sa.opened / sa.sent) * 100) : 0;
+                              const replyRate = sa.sent > 0 ? Math.round((sa.replied / sa.sent) * 100) : 0;
+                              return (
+                                <>
+                                  <div key={`label-${sa.step_index}`} className="font-medium">Step {sa.step_index + 1}</div>
+                                  <div key={`sent-${sa.step_index}`}>{sa.sent}</div>
+                                  <div key={`opened-${sa.step_index}`} className="flex items-center gap-2">
+                                    <Progress value={openRate} className="h-1.5 flex-1" />
+                                    <span>{openRate}%</span>
+                                  </div>
+                                  <div key={`replied-${sa.step_index}`} className="flex items-center gap-2">
+                                    <Progress value={replyRate} className="h-1.5 flex-1" />
+                                    <span>{replyRate}%</span>
+                                  </div>
+                                </>
+                              );
+                            })}
+                          </div>
+                          {stepAnalytics.every((sa) => sa.sent === 0) && (
+                            <p className="text-[11px] text-muted-foreground text-center py-2">No data yet — enroll leads to see analytics</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           ))}
         </div>
       )}
