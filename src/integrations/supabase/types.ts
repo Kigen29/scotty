@@ -463,6 +463,33 @@ export type Database = {
           },
         ]
       }
+      sequence_templates: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          steps: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          steps?: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          steps?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
       sequences: {
         Row: {
           created_at: string
