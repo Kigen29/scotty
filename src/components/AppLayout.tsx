@@ -27,6 +27,19 @@ const AppLayout = () => {
   const location = useLocation();
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { unreadActivity, newAssignments, markActivitySeen, markAssignmentsSeen } = useNotifications();
+
+  // Mark as seen when navigating to relevant pages
+  useEffect(() => {
+    if (location.pathname === "/") markActivitySeen();
+    if (location.pathname === "/pipeline") markAssignmentsSeen();
+  }, [location.pathname, markActivitySeen, markAssignmentsSeen]);
+
+  const getBadgeCount = (key?: "activity" | "assignments") => {
+    if (key === "activity") return unreadActivity;
+    if (key === "assignments") return newAssignments;
+    return 0;
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
