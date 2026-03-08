@@ -1,7 +1,8 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, Search, Mail, MessageSquare, BarChart3, Settings, Zap, Menu, X, GitBranch, ShieldCheck, Columns3,
+  LayoutDashboard, Search, Mail, MessageSquare, BarChart3, Settings, Zap, Menu, X, GitBranch, ShieldCheck, Columns3, Sun, Moon,
 } from "lucide-react";
+import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
