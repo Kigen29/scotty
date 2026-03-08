@@ -9,7 +9,17 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, GripVertical, Mail, Clock, ArrowDown, Zap, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Plus, Trash2, GripVertical, Mail, Clock, ArrowDown, Zap,
+  ChevronDown, ChevronUp, Sparkles, Loader2, Wand2,
+} from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface SequenceStep {
   subject: string;
@@ -39,6 +49,13 @@ const Sequences = () => {
   const [editing, setEditing] = useState<Sequence | null>(null);
   const [loading, setLoading] = useState(false);
   const [expandedStep, setExpandedStep] = useState<number | null>(0);
+
+  // AI generation state
+  const [showAiForm, setShowAiForm] = useState(false);
+  const [aiGoal, setAiGoal] = useState("");
+  const [aiStepCount, setAiStepCount] = useState("3");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [refiningStep, setRefiningStep] = useState<number | null>(null);
 
   useEffect(() => {
     if (user) fetchSequences();
@@ -135,6 +152,78 @@ const Sequences = () => {
     setExpandedStep(newIndex);
   };
 
+  const generateWithAi = async () => {
+    if (!aiGoal.trim()) {
+      toast({ title: "Please describe your outreach goal", variant: "destructive" });
+      return;
+    }
+    setAiGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-sequence-steps", {
+        body: { goal: aiGoal, num_steps: parseInt(aiStepCount), mode: "generate" },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const result = data.result;
+      if (result?.name && result?.steps) {
+        setEditing({
+          ...editing!,
+          name: result.name,
+          steps: result.steps.map((s: any, i: number) => ({
+            subject: s.subject || "",
+            body_prompt: s.body_prompt || "",
+            delay_days: i === 0 ? 0 : (s.delay_days || 3),
+            channel: s.channel || "email",
+          })),
+        });
+        setShowAiForm(false);
+        setAiGoal("");
+        setExpandedStep(0);
+        toast({ title: "Sequence generated!", description: `${result.steps.length} steps created by AI` });
+      }
+    } catch (error: any) {
+      toast({ title: "AI generation failed", description: error.message, variant: "destructive" });
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const refineStepWithAi = async (index: number) => {
+    if (!editing) return;
+    const step = editing.steps[index];
+    if (!step.body_prompt.trim() && !step.subject.trim()) {
+      toast({ title: "Add some content first", description: "Write a subject or prompt before refining", variant: "destructive" });
+      return;
+    }
+    setRefiningStep(index);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-sequence-steps", {
+        body: {
+          mode: "refine",
+          existing_step: { subject: step.subject, body_prompt: step.body_prompt },
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const result = data.result;
+      if (result) {
+        const steps = editing.steps.map((s, i) =>
+          i === index
+            ? { ...s, subject: result.subject || s.subject, body_prompt: result.body_prompt || s.body_prompt }
+            : s
+        );
+        setEditing({ ...editing, steps });
+        toast({ title: "Step improved by AI" });
+      }
+    } catch (error: any) {
+      toast({ title: "AI refine failed", description: error.message, variant: "destructive" });
+    } finally {
+      setRefiningStep(null);
+    }
+  };
+
   // Builder view
   if (editing) {
     return (
@@ -147,12 +236,80 @@ const Sequences = () => {
             <p className="text-sm text-muted-foreground">Define the email steps AI will send</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button variant="outline" size="sm" onClick={() => { setEditing(null); setShowAiForm(false); }}>Cancel</Button>
             <Button size="sm" onClick={saveSequence} disabled={loading}>
               {loading ? "Saving..." : "Save Sequence"}
             </Button>
           </div>
         </div>
+
+        {/* AI Generate Section */}
+        {!editing.id && (
+          <div>
+            {!showAiForm ? (
+              <Button
+                variant="outline"
+                className="w-full border-dashed border-primary/40 text-primary hover:bg-primary/5"
+                onClick={() => setShowAiForm(true)}
+              >
+                <Wand2 className="h-4 w-4 mr-2" />
+                Generate with AI
+              </Button>
+            ) : (
+              <Card className="border-primary/30 bg-primary/5">
+                <CardContent className="pt-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">AI Sequence Generator</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Describe your outreach goal</Label>
+                    <Input
+                      value={aiGoal}
+                      onChange={(e) => setAiGoal(e.target.value)}
+                      placeholder="e.g. Cold outreach to restaurants without websites, offering web design services"
+                      className="h-9 text-xs"
+                      disabled={aiGenerating}
+                    />
+                  </div>
+                  <div className="flex items-end gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Number of steps</Label>
+                      <Select value={aiStepCount} onValueChange={setAiStepCount} disabled={aiGenerating}>
+                        <SelectTrigger className="w-20 h-9 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[2, 3, 4, 5].map((n) => (
+                            <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={generateWithAi} disabled={aiGenerating} className="h-9">
+                        {aiGenerating ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                            Generate
+                          </>
+                        )}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setShowAiForm(false)} disabled={aiGenerating} className="h-9">
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
 
         <div className="flex items-center gap-4">
           <div className="flex-1 space-y-1.5">
@@ -239,7 +396,23 @@ const Sequences = () => {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs">AI Prompt / Template</Label>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">AI Prompt / Template</Label>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-[10px] text-primary hover:text-primary"
+                          onClick={() => refineStepWithAi(i)}
+                          disabled={refiningStep === i}
+                        >
+                          {refiningStep === i ? (
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3 w-3 mr-1" />
+                          )}
+                          {refiningStep === i ? "Improving..." : "AI Improve"}
+                        </Button>
+                      </div>
                       <Textarea
                         value={step.body_prompt}
                         onChange={(e) => updateStep(i, "body_prompt", e.target.value)}
