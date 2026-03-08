@@ -38,9 +38,9 @@
     --sidebar-foreground: 0 0% 0%;
     --sidebar-primary: 152 60% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 20% 16%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 220 20% 18%;
+    --sidebar-accent: 220 16% 93%;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-border: 220 13% 87%;
     --sidebar-ring: 152 60% 50%;
 
     --chart-1: 152 60% 42%;
