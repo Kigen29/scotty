@@ -14,6 +14,7 @@ import Reports from "@/pages/Reports";
 import Deliverability from "@/pages/Deliverability";
 import SettingsPage from "@/pages/SettingsPage";
 import Sequences from "@/pages/Sequences";
+import Pipeline from "@/pages/Pipeline";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
