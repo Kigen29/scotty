@@ -20,10 +20,15 @@ const Dashboard = () => {
   useEffect(() => {
     if (!user) return;
     const fetchAll = async () => {
-      const [{ data: leads }, { data: emails }, { data: logs }] = await Promise.all([
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const [{ data: leads }, { data: emails }, { data: logs }, { data: settingsData }, { count: sentToday }] = await Promise.all([
         supabase.from("leads").select("*").eq("user_id", user.id),
         supabase.from("email_campaigns").select("*").eq("user_id", user.id),
         supabase.from("activity_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(15),
+        supabase.from("settings").select("daily_send_limit").eq("user_id", user.id).maybeSingle(),
+        supabase.from("email_campaigns").select("id", { count: "exact", head: true }).eq("user_id", user.id).gte("sent_at", todayStart.toISOString()),
       ]);
 
       if (leads) {
