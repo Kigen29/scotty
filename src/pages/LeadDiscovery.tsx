@@ -715,7 +715,7 @@ const LeadDiscovery = () => {
                 {/* Actions */}
                 <div className="flex flex-col gap-2 pt-2">
                   <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1" onClick={() => openExternal(getProfileUrl(detailLead))}>
+                    <Button variant="outline" className="flex-1" onClick={() => handleViewProfile(detailLead)}>
                       <ExternalLink className="h-4 w-4 mr-2" /> View Profile
                     </Button>
                     {!(detailLead.analysis as any)?.enrichment && (
