@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { MessageSquare, ArrowUpRight, ArrowDownLeft, Sparkles, Send, Loader2 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { DateFilter, type DateRange } from "@/components/DateFilter";

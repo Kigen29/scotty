@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { Mail, Send, Clock, Loader2, Copy, MessageCircle, Instagram, Linkedin, Pencil } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { DateFilter, type DateRange } from "@/components/DateFilter";
