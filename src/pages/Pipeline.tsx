@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, DragOverlay, closestCorners } from "@dnd-kit/core";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -6,7 +6,11 @@ import { useToast } from "@/hooks/use-toast";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { Star, Mail, Phone, MapPin, Globe } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import { Button } from "@/components/ui/button";
+import { Star, Mail, Phone, MapPin, Globe, Search, X } from "lucide-react";
 import KanbanColumn from "@/components/pipeline/KanbanColumn";
 
 const STAGES = [
@@ -24,6 +28,10 @@ const Pipeline = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [selectedLead, setSelectedLead] = useState<any | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [locationFilter, setLocationFilter] = useState("all");
+  const [minPriority, setMinPriority] = useState(0);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -97,6 +105,29 @@ const Pipeline = () => {
 
   const activeLead = leads.find((l) => l.id === activeId);
 
+  // Derive unique categories and locations for filter dropdowns
+  const categories = useMemo(() => [...new Set(leads.map((l) => l.category).filter(Boolean))].sort(), [leads]);
+  const locations = useMemo(() => [...new Set(leads.map((l) => l.location).filter(Boolean))].sort(), [leads]);
+
+  const filteredLeads = useMemo(() => {
+    return leads.filter((l) => {
+      if (searchQuery && !l.business_name?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      if (categoryFilter !== "all" && l.category !== categoryFilter) return false;
+      if (locationFilter !== "all" && l.location !== locationFilter) return false;
+      if ((l.priority_score || 0) < minPriority) return false;
+      return true;
+    });
+  }, [leads, searchQuery, categoryFilter, locationFilter, minPriority]);
+
+  const hasFilters = searchQuery || categoryFilter !== "all" || locationFilter !== "all" || minPriority > 0;
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setCategoryFilter("all");
+    setLocationFilter("all");
+    setMinPriority(0);
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-4 h-full flex flex-col">
       <div>
@@ -106,10 +137,61 @@ const Pipeline = () => {
         </p>
       </div>
 
+      {/* Search & Filters */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="relative w-full max-w-[220px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search leads..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-8 h-8 text-xs"
+          />
+        </div>
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="w-[150px] h-8 text-xs">
+            <SelectValue placeholder="Category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c} value={c}>{c}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={locationFilter} onValueChange={setLocationFilter}>
+          <SelectTrigger className="w-[140px] h-8 text-xs">
+            <SelectValue placeholder="Location" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Locations</SelectItem>
+            {locations.map((loc) => (
+              <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground whitespace-nowrap">Priority ≥ {minPriority}</span>
+          <Slider
+            value={[minPriority]}
+            onValueChange={([v]) => setMinPriority(v)}
+            min={0}
+            max={10}
+            step={1}
+            className="w-[100px]"
+          />
+        </div>
+        {hasFilters && (
+          <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={clearFilters}>
+            <X className="h-3 w-3" /> Clear
+          </Button>
+        )}
+      </div>
+
       {/* Summary bar */}
       <div className="flex gap-3 flex-wrap">
         {STAGES.map((stage) => {
-          const count = leads.filter((l) => l.status === stage.id).length;
+          const count = filteredLeads.filter((l) => l.status === stage.id).length;
           return (
             <div key={stage.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <div className={`h-2 w-2 rounded-full ${stage.color}`} />
@@ -118,6 +200,11 @@ const Pipeline = () => {
             </div>
           );
         })}
+        {hasFilters && (
+          <span className="text-[11px] text-muted-foreground ml-auto">
+            Showing {filteredLeads.length} of {leads.length}
+          </span>
+        )}
       </div>
 
       {/* Kanban Board */}
@@ -136,7 +223,7 @@ const Pipeline = () => {
                 id={stage.id}
                 label={stage.label}
                 color={stage.color}
-                leads={leads.filter((l) => l.status === stage.id)}
+                leads={filteredLeads.filter((l) => l.status === stage.id)}
                 onCardClick={setSelectedLead}
               />
             ))}
