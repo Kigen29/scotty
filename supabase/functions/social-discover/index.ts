@@ -283,14 +283,14 @@ My portfolio: ${JSON.stringify(portfolioProjects)}
 
 Priority score 1-10, pain points, solutions, matched portfolio.`;
 
-            const analysisResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            const analysisResponse = await fetch(aiUrl, {
               method: "POST",
               headers: {
-                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                Authorization: `Bearer ${aiKey}`,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                model: "google/gemini-3-flash-preview",
+                model: aiModel,
                 messages: [
                   { role: "system", content: "You are a business intelligence analyst." },
                   { role: "user", content: analysisPrompt },
