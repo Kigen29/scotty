@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.notify-assignment]
 verify_jwt = false
+
+[functions.generate-sequence-steps]
+verify_jwt = false
