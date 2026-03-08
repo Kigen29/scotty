@@ -44,6 +44,7 @@ const Dashboard = () => {
         emailsSent: emails?.filter((e) => e.status === "sent").length || 0,
         drafts: emails?.filter((e) => e.status === "draft").length || 0,
         responseRate: contacted > 0 ? Math.round((responded / contacted) * 100) : 0,
+        meetingsBooked: meetingsCount || 0,
       });
       setHotLeads(
         leads.filter((l: any) => l.status === "interested" || (l.priority_score && l.priority_score >= 8))
