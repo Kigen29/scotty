@@ -330,6 +330,19 @@ const SettingsPage = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Team Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Users className="h-4 w-4" /> Team
+          </CardTitle>
+          <CardDescription>Manage your team, invite members, and assign roles</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TeamSettings />
+        </CardContent>
+      </Card>
     </div>
   );
 };
