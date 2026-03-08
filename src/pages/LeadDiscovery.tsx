@@ -15,7 +15,7 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import {
   Search, Globe, Phone, Mail, MapPin, CheckCircle2, X, Loader2, Star, Brain,
   ExternalLink, ChevronUp, ChevronDown, Users, Filter, ArrowUpDown, Trash2, Cpu, Zap, Flame,
-  ShieldCheck, ShieldAlert, ShieldX,
+  ShieldCheck, ShieldAlert, ShieldX, Sparkles, Building2, Lightbulb,
 } from "lucide-react";
 
 const categories = [
