@@ -12,8 +12,9 @@ import {
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer,
-  CartesianGrid, PieChart, Pie, Cell, Legend,
+  CartesianGrid, PieChart, Pie, Cell,
 } from "recharts";
+import ExportableChart from "@/components/ExportableChart";
 
 const PIE_COLORS = [
   "hsl(var(--primary))",
@@ -52,7 +53,6 @@ const Deliverability = () => {
 
   useRealtimeSubscription("email_campaigns", user?.id, fetchAll);
 
-  // Compute stats
   const stats = useMemo(() => {
     const sent = campaigns.filter((c) => ["sent", "opened", "replied", "bounced", "delivered"].includes(c.status));
     const opened = campaigns.filter((c) => c.opened_at || c.status === "opened" || c.status === "replied");
@@ -70,7 +70,6 @@ const Deliverability = () => {
     };
   }, [campaigns]);
 
-  // Status distribution for pie chart
   const statusDist = useMemo(() => {
     const counts: Record<string, number> = {};
     campaigns.forEach((c) => {
@@ -79,7 +78,6 @@ const Deliverability = () => {
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [campaigns]);
 
-  // Daily send volume (last 14 days)
   const dailyVolume = useMemo(() => {
     const now = new Date();
     return Array.from({ length: 14 }).map((_, i) => {
@@ -95,7 +93,6 @@ const Deliverability = () => {
     });
   }, [campaigns]);
 
-  // Sender health score (0-100)
   const healthScore = useMemo(() => {
     if (stats.totalSent === 0) return 100;
     const penalty = stats.bounceRate * 2;
@@ -112,8 +109,15 @@ const Deliverability = () => {
     { label: "REPLY RATE", value: `${stats.replyRate}%`, icon: TrendingUp, accent: "text-blue-500" },
   ];
 
+  const tooltipStyle = {
+    backgroundColor: "hsl(var(--card))",
+    border: "1px solid hsl(var(--border))",
+    borderRadius: "8px",
+    fontSize: 12,
+  };
+
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-8">
       <div>
         <h1 className="text-xl md:text-2xl font-bold">Deliverability</h1>
         <p className="text-sm text-muted-foreground">Email health, open/bounce tracking, and A/B test results</p>
@@ -188,83 +192,57 @@ const Deliverability = () => {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-4 space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Send Volume Chart */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">14-Day Send Volume</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={dailyVolume}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="day" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
-                    <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" />
-                    <RechartsTooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                        fontSize: 12,
-                      }}
-                    />
-                    <Bar dataKey="sent" name="Sent" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="opened" name="Opened" fill="hsl(142 71% 45%)" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="bounced" name="Bounced" fill="hsl(0 84% 60%)" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+        <TabsContent value="overview" className="mt-6 space-y-6">
+          {/* Send Volume Chart — full width */}
+          <ExportableChart title="14-Day Send Volume" fileName="send_volume">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={dailyVolume}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="day" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
+                <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" />
+                <RechartsTooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="sent" name="Sent" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="opened" name="Opened" fill="hsl(142 71% 45%)" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="bounced" name="Bounced" fill="hsl(0 84% 60%)" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ExportableChart>
 
-            {/* Status Pie Chart */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Status Distribution</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {statusDist.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-12">No data yet</p>
-                ) : (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <PieChart>
-                      <Pie
-                        data={statusDist}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={55}
-                        outerRadius={90}
-                        paddingAngle={3}
-                        dataKey="value"
-                        label={({ name, percent }) =>
-                          `${name} ${(percent * 100).toFixed(0)}%`
-                        }
-                      >
-                        {statusDist.map((_, i) => (
-                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                          fontSize: 12,
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          {/* Status Pie Chart — full width */}
+          <ExportableChart title="Status Distribution" fileName="status_distribution">
+            {statusDist.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-12">No data yet</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={statusDist}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={3}
+                    dataKey="value"
+                    label={({ name, percent }) =>
+                      `${name} ${(percent * 100).toFixed(0)}%`
+                    }
+                  >
+                    {statusDist.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip contentStyle={tooltipStyle} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </ExportableChart>
 
-          {/* Recent bounces / issues */}
+          {/* Recent bounces */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Recent Bounces & Issues</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6">
               {campaigns.filter((c) => c.status === "bounced").length === 0 ? (
                 <div className="flex flex-col items-center py-10 text-muted-foreground">
                   <ShieldCheck className="h-8 w-8 mb-2 opacity-50" />
@@ -307,7 +285,7 @@ const Deliverability = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="abtests" className="mt-4 space-y-4">
+        <TabsContent value="abtests" className="mt-6 space-y-6">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -315,7 +293,7 @@ const Deliverability = () => {
                 A/B Test Results
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6">
               <p className="text-xs text-muted-foreground mb-4">
                 When generating emails, the system creates two subject-line variants. The winner is
                 determined by which gets opened first.
