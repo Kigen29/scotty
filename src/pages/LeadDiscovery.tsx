@@ -13,7 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search, Globe, Phone, Mail, MapPin, CheckCircle2, X, Loader2, Star, Brain,
-  ExternalLink, ChevronUp, ChevronDown, Users, Filter, ArrowUpDown, Trash2,
+  ExternalLink, ChevronUp, ChevronDown, Users, Filter, ArrowUpDown, Trash2, Cpu, Zap, Flame,
 } from "lucide-react";
 
 const categories = [
