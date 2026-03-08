@@ -1,8 +1,23 @@
 
 
-This error is unrelated to the app's code — it's a broken Google Maps short URL (`maps.app.goo.gl/...`) that was likely stored as a lead's Google Maps link in the database. The link itself is invalid or expired.
+## Fix Broken Google Maps Link
 
-**No code changes needed.** This is a data issue, not a bug. The invalid Google Maps URL exists in one of your lead records.
+**Lead found:** "Naomi's Locks & Cuts" (ID: `9785949c-...-bf568d2dcdc7`)
+**Broken field:** `social_links.google_maps` = `https://maps.app.goo.gl/MNopQrStUvWxYzAb1`
 
-**To fix:** Find and update the lead record containing the broken Google Maps link with a valid URL, or remove it.
+### Plan
+
+1. **Run a database migration** to update the `social_links` for this lead, replacing the broken short URL with a proper Google Maps search link based on the business name and location:
+
+```sql
+UPDATE leads
+SET social_links = jsonb_set(
+  social_links,
+  '{google_maps}',
+  '"https://www.google.com/maps/search/?api=1&query=Naomi%27s+Locks+%26+Cuts"'
+)
+WHERE id = '9785949c-d797-414b-89d3-bf568d2dcdc7';
+```
+
+This replaces the dead short link with a working Google Maps search URL. No frontend code changes needed.
 
