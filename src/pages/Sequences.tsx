@@ -482,6 +482,32 @@ const Sequences = () => {
         </Button>
       </div>
 
+      {/* Preset Templates */}
+      <div>
+        <h2 className="text-sm font-medium mb-2">Start from a template</h2>
+        <div className="grid grid-cols-3 gap-3">
+          {PRESET_TEMPLATES.map((tpl) => {
+            const Icon = tpl.icon;
+            return (
+              <Card
+                key={tpl.name}
+                className="cursor-pointer hover:border-primary/40 transition-colors"
+                onClick={() => setEditing({ name: tpl.name, steps: tpl.steps, is_active: true })}
+              >
+                <CardContent className="p-3 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">{tpl.name}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">{tpl.description}</p>
+                  <p className="text-[10px] text-muted-foreground/70">{tpl.steps.length} steps</p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
       {sequences.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
