@@ -542,7 +542,7 @@ const LeadDiscovery = () => {
                           {enriching === lead.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                         </Button>
                       )}
-                      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => openExternal(getProfileUrl(lead))}>
+                      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => handleViewProfile(lead)}>
                         <ExternalLink className="h-3.5 w-3.5" />
                       </Button>
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={() => deleteLead(lead.id)}>
