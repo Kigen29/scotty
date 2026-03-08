@@ -956,6 +956,80 @@ const Sequences = () => {
           ))}
         </div>
       )}
+
+      {/* Bulk Enrollment Dialog */}
+      <Dialog open={!!enrollSeqId} onOpenChange={(open) => { if (!open) setEnrollSeqId(null); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Enroll Leads into Sequence</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 flex-1 overflow-hidden flex flex-col">
+            <Input
+              placeholder="Search leads..."
+              value={leadSearch}
+              onChange={(e) => setLeadSearch(e.target.value)}
+              className="h-8 text-sm"
+            />
+            {leadsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground ml-2">Loading leads...</span>
+              </div>
+            ) : filteredLeads.length === 0 ? (
+              <div className="flex flex-col items-center py-8 text-muted-foreground">
+                <UserPlus className="h-8 w-8 mb-2 opacity-50" />
+                <p className="text-sm">{availableLeads.length === 0 ? "No eligible leads found" : "No leads match your search"}</p>
+                <p className="text-xs mt-1">Leads need an email and must not already be enrolled</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <button onClick={toggleAll} className="hover:text-foreground transition-colors">
+                    {selectedLeadIds.size === filteredLeads.length ? "Deselect all" : "Select all"} ({filteredLeads.length})
+                  </button>
+                  <span>{selectedLeadIds.size} selected</span>
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-1 min-h-0 max-h-[40vh]">
+                  {filteredLeads.map((lead) => (
+                    <div
+                      key={lead.id}
+                      className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${
+                        selectedLeadIds.has(lead.id) ? "bg-primary/10 border border-primary/30" : "hover:bg-muted border border-transparent"
+                      }`}
+                      onClick={() => toggleLead(lead.id)}
+                    >
+                      <div className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 ${
+                        selectedLeadIds.has(lead.id) ? "bg-primary border-primary" : "border-muted-foreground/30"
+                      }`}>
+                        {selectedLeadIds.has(lead.id) && (
+                          <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 12 12" fill="none">
+                            <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{lead.business_name}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{lead.email}{lead.location ? ` · ${lead.location}` : ""}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setEnrollSeqId(null)}>Cancel</Button>
+            <Button
+              size="sm"
+              disabled={selectedLeadIds.size === 0 || enrolling}
+              onClick={enrollLeads}
+            >
+              {enrolling ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <UserPlus className="h-3.5 w-3.5 mr-1" />}
+              Enroll {selectedLeadIds.size > 0 ? `${selectedLeadIds.size} Lead${selectedLeadIds.size > 1 ? "s" : ""}` : "Leads"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
