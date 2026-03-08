@@ -316,6 +316,43 @@ const Pipeline = () => {
                   </span>
                 </div>
 
+                {/* Assignment */}
+                {members.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs flex items-center gap-1.5">
+                      <UserCircle className="h-3.5 w-3.5" /> Assigned To
+                    </Label>
+                    <Select
+                      value={selectedLead.assigned_to || "unassigned"}
+                      onValueChange={async (v) => {
+                        const target = v === "unassigned" ? null : v;
+                        const { error } = await assignLead(selectedLead.id, target);
+                        if (!error) {
+                          setSelectedLead({ ...selectedLead, assigned_to: target });
+                          setLeads((prev) =>
+                            prev.map((l) =>
+                              l.id === selectedLead.id ? { ...l, assigned_to: target } : l
+                            )
+                          );
+                          toast({ title: target ? "Lead assigned" : "Assignment removed" });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Unassigned" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        {members.map((m) => (
+                          <SelectItem key={m.user_id} value={m.user_id}>
+                            {m.display_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 {selectedLead.notes && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-1">Notes</p>
