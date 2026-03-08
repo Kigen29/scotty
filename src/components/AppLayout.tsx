@@ -101,7 +101,12 @@ const AppLayout = () => {
               }
             >
               <item.icon className="h-4 w-4" />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {item.badgeKey && getBadgeCount(item.badgeKey) > 0 && (
+                <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground px-1.5">
+                  {getBadgeCount(item.badgeKey) > 99 ? "99+" : getBadgeCount(item.badgeKey)}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
