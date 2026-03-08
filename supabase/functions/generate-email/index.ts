@@ -154,11 +154,12 @@ This is your first follow-up after your initial personal email went unanswered.
             type: "function",
             function: {
               name: "compose_email",
-              description: "Compose the outreach email",
+              description: "Compose the outreach email. If ab_variant is requested, provide two different subject lines.",
               parameters: {
                 type: "object",
                 properties: {
                   subject: { type: "string", description: "Email subject line, compelling and personalized" },
+                  subject_b: { type: "string", description: "Alternative subject line for A/B testing (different angle/tone)" },
                   body: { type: "string", description: "Email body text, well-formatted with line breaks" },
                 },
                 required: ["subject", "body"],
