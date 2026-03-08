@@ -48,14 +48,16 @@ const Campaigns = () => {
   const [editBody, setEditBody] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { if (user) fetchCampaigns(); }, [user]);
-
-  const fetchCampaigns = async () => {
+  const fetchCampaigns = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase
       .from("email_campaigns").select("*, leads(*)").eq("user_id", user.id).order("created_at", { ascending: false });
     if (data) setCampaigns(data as any);
-  };
+  }, [user]);
+
+  useEffect(() => { if (user) fetchCampaigns(); }, [user, fetchCampaigns]);
+
+  useRealtimeSubscription("email_campaigns", user?.id, fetchCampaigns);
 
   const sendEmail = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
