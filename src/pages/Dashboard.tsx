@@ -127,6 +127,28 @@ const Dashboard = () => {
         ))}
       </div>
 
+      {/* Daily Quota */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Today's Send Quota</span>
+            </div>
+            <span className="text-sm font-semibold">{quota.sent} / {quota.limit}</span>
+          </div>
+          <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all duration-500"
+              style={{ width: `${Math.min((quota.sent / quota.limit) * 100, 100)}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground mt-1.5">
+            {quota.limit - quota.sent > 0 ? `${quota.limit - quota.sent} emails remaining today` : "Daily limit reached"}
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Pipeline funnel */}
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Pipeline</CardTitle></CardHeader>
