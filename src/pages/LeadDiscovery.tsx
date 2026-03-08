@@ -48,6 +48,9 @@ const LeadDiscovery = () => {
   const [discLocation, setDiscLocation] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Current pipeline
+  const [currentPipeline, setCurrentPipeline] = useState<string>("firecrawl");
+
   // Filters
   const [filterSearch, setFilterSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
