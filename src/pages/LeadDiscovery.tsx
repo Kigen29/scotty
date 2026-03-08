@@ -252,6 +252,12 @@ const LeadDiscovery = () => {
     if (filterLocation !== "all") result = result.filter((l) => l.location === filterLocation);
     if (filterStatus !== "all") result = result.filter((l) => l.status === filterStatus);
     if (filterHasEmail) result = result.filter((l) => l.email);
+    if (filterDateRange) {
+      result = result.filter((l) => {
+        const d = new Date(l.created_at);
+        return d >= filterDateRange.from && d <= filterDateRange.to;
+      });
+    }
 
     result = [...result].sort((a, b) => {
       let av = a[sortKey] ?? "";
