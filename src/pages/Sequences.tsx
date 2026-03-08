@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Trash2, GripVertical, Mail, Clock, ArrowDown, Zap,
   ChevronDown, ChevronUp, Sparkles, Loader2, Wand2, RotateCcw,
-  Send, UserPlus, Bookmark, BarChart3, Eye, Reply,
+  Send, UserPlus, Bookmark, BarChart3, Eye, Reply, Pause, Play, Users, X,
 } from "lucide-react";
 import {
   Select,
