@@ -67,6 +67,8 @@ Deno.serve(async (req) => {
       .eq("user_id", userId)
       .maybeSingle();
 
+    const bookingLink = (settings as any)?.booking_link || "";
+
     const senderName = settings?.company_name || "Emmanuel Kigen";
     const services = settings?.services?.join(", ") || "web development, mobile apps, and digital solutions";
     const portfolio = settings?.portfolio_links?.join(", ") || "";
