@@ -1,56 +1,50 @@
 
 
-## Plan: Fix Pipeline Routing and Add OpenAI Pipeline Option
+# Chart & Spacing Improvements Plan
 
-### Root Cause
+## Problems Identified
+1. **Horizontal bar charts** (category breakdown in Reports, pipeline funnels in Dashboard/Reports) look cramped and hard to read
+2. **Charts are too short** — 220px height is cramped, especially with many data points
+3. **Spacing is tight** — cards and sections feel crammed with `space-y-6` and small padding
+4. **No per-chart export** — only a global CSV export exists on Reports page
 
-The manual "Discover Leads" button on the Lead Discovery page calls `discover-leads` edge function directly, which **never checks the user's `discovery_pipeline` setting**. It always tries Firecrawl first, regardless of what you chose in Settings. The `auto-discover` function (cron job) does check the setting, but `discover-leads` (manual trigger) does not.
+## Changes
 
-Additionally, `discover-leads/index.ts` has a **duplicate variable declaration** (`FIRECRAWL_API_KEY` on lines 51 and 62) which would cause a runtime error.
+### 1. Create a reusable `ExportableChart` wrapper component
+**New file: `src/components/ExportableChart.tsx`**
+- Wraps any chart card with a download button in the card header
+- Uses `html-to-image` (or native canvas `toBlob`) to capture the chart container as PNG
+- Also offers SVG export option
+- Implementation: use a `ref` on the chart container, then `HTMLCanvasElement.toBlob()` via the recharts `<ResponsiveContainer>` inner SVG element — convert SVG to canvas to PNG using a small utility function (no new dependency needed — use native browser APIs: serialize SVG → draw on canvas → export)
 
----
+### 2. Dashboard (`src/pages/Dashboard.tsx`)
+- **Pipeline funnel**: Convert from horizontal bars to a **vertical stepped funnel** — each stage is a column with a colored bar growing upward, labels below. This is more intuitive and visually distinct
+- **7-Day Activity chart**: Increase height from 220px to 300px, add more padding inside CardContent (`p-6` instead of default)
+- **Spacing**: Change outer `space-y-6` to `space-y-8`, increase card content padding
+- Wrap both charts with `ExportableChart`
 
-### Changes
+### 3. Reports (`src/pages/Reports.tsx`)
+- **"Leads by Category" bar chart**: Convert from `layout="vertical"` (horizontal bars) to standard **vertical bars** with categories on X-axis (rotated labels if needed). Increase height to 320px
+- **Daily Activity area chart**: Increase height to 300px
+- **Conversion Funnel**: Convert from horizontal progress bars to a **vertical bar chart** using Recharts BarChart with funnel-colored bars
+- Increase spacing: `space-y-8`, card padding `p-6`
+- Make charts full-width (single column) instead of 2-col grid for more breathing room
+- Wrap all charts with `ExportableChart`
 
-#### 1. Fix `discover-leads` to respect pipeline setting
+### 4. Deliverability (`src/pages/Deliverability.tsx`)
+- Bar chart and pie chart heights: increase from 240px to 300px
+- Add more spacing between sections
+- Wrap charts with `ExportableChart`
 
-Rewrite `supabase/functions/discover-leads/index.ts`:
-- Remove the duplicate `FIRECRAWL_API_KEY` declaration
-- After authenticating the user, fetch their `settings` row and read `discovery_pipeline`
-- If `lovable_ai`: skip Firecrawl entirely, use the AI-only prompt (existing fallback path)
-- If `openai`: use the OpenAI API key from secrets with the same discovery prompt
-- If `firecrawl` (default): use current Firecrawl logic with AI fallback
+### 5. Export Implementation (inside `ExportableChart`)
+- Use a `ref` to grab the chart's SVG element
+- Serialize SVG → create Image → draw on Canvas → `canvas.toBlob()` → download as PNG
+- Button label: small download icon in card header, tooltip "Export as PNG"
+- No new npm dependencies required
 
-#### 2. Add OpenAI pipeline option
-
-**Database**: Add no schema changes needed -- `discovery_pipeline` is already a `text` column, so it can store `'openai'` as a value.
-
-**New secret**: Use the `add_secret` tool to request the user's OpenAI API key (`OPENAI_API_KEY`).
-
-**Edge functions** -- Update both `discover-leads` and `auto-discover` to handle `pipeline === 'openai'`:
-- Call `https://api.openai.com/v1/chat/completions` directly with the user's OpenAI API key
-- Use `gpt-4o-mini` as the default model (cost-effective for extraction)
-- Same tool-calling schema and prompts as the Lovable AI path, just different endpoint and auth
-
-#### 3. Update Settings UI
-
-Add a third radio option in the Discovery Pipeline card:
-- **Firecrawl** -- Web scraping via Firecrawl API
-- **Lovable AI** -- Uses built-in AI gateway (no extra keys needed)
-- **OpenAI** -- Uses your own OpenAI API key (GPT-4o-mini)
-
-#### 4. Update `auto-discover` routing
-
-Add `openai` case alongside the existing `lovable_ai` case. For OpenAI, run the same logic as `ai-discover` but swap the API endpoint and key.
-
----
-
-### Files to Modify
-
-| File | Change |
-|---|---|
-| `supabase/functions/discover-leads/index.ts` | Fix duplicate var, add pipeline routing (read settings, branch on firecrawl/lovable_ai/openai) |
-| `supabase/functions/auto-discover/index.ts` | Add `openai` pipeline routing case |
-| `supabase/functions/ai-discover/index.ts` | Add optional OpenAI mode (accept `pipeline` param in body) |
-| `src/pages/SettingsPage.tsx` | Add third "OpenAI" radio option with key icon |
+## Files to Create/Edit
+1. **Create** `src/components/ExportableChart.tsx` — reusable wrapper with export button
+2. **Edit** `src/pages/Dashboard.tsx` — vertical funnel, taller chart, better spacing, export buttons
+3. **Edit** `src/pages/Reports.tsx` — vertical bars for categories, vertical funnel, taller charts, full-width layout, export buttons
+4. **Edit** `src/pages/Deliverability.tsx` — taller charts, better spacing, export buttons
 
