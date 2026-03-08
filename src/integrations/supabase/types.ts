@@ -196,6 +196,8 @@ export type Database = {
           discovered_at: string
           discovery_source: string | null
           email: string | null
+          email_verification_status: string | null
+          email_verified: boolean | null
           has_website: boolean | null
           icp_score: number | null
           id: string
@@ -219,6 +221,8 @@ export type Database = {
           discovered_at?: string
           discovery_source?: string | null
           email?: string | null
+          email_verification_status?: string | null
+          email_verified?: boolean | null
           has_website?: boolean | null
           icp_score?: number | null
           id?: string
@@ -242,6 +246,8 @@ export type Database = {
           discovered_at?: string
           discovery_source?: string | null
           email?: string | null
+          email_verification_status?: string | null
+          email_verified?: boolean | null
           has_website?: boolean | null
           icp_score?: number | null
           id?: string
@@ -257,6 +263,50 @@ export type Database = {
           website_url?: string | null
         }
         Relationships: []
+      }
+      meetings: {
+        Row: {
+          booking_link: string | null
+          created_at: string
+          id: string
+          lead_id: string
+          notes: string | null
+          scheduled_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          booking_link?: string | null
+          created_at?: string
+          id?: string
+          lead_id: string
+          notes?: string | null
+          scheduled_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          booking_link?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string
+          notes?: string | null
+          scheduled_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meetings_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sequence_enrollments: {
         Row: {
@@ -346,6 +396,7 @@ export type Database = {
         Row: {
           active_hours_end: string | null
           active_hours_start: string | null
+          booking_link: string | null
           company_name: string | null
           company_website: string | null
           created_at: string
@@ -369,6 +420,7 @@ export type Database = {
         Insert: {
           active_hours_end?: string | null
           active_hours_start?: string | null
+          booking_link?: string | null
           company_name?: string | null
           company_website?: string | null
           created_at?: string
@@ -392,6 +444,7 @@ export type Database = {
         Update: {
           active_hours_end?: string | null
           active_hours_start?: string | null
+          booking_link?: string | null
           company_name?: string | null
           company_website?: string | null
           created_at?: string

@@ -67,6 +67,8 @@ Deno.serve(async (req) => {
       .eq("user_id", userId)
       .maybeSingle();
 
+    const bookingLink = (settings as any)?.booking_link || "";
+
     const senderName = settings?.company_name || "Emmanuel Kigen";
     const services = settings?.services?.join(", ") || "web development, mobile apps, and digital solutions";
     const portfolio = settings?.portfolio_links?.join(", ") || "";
@@ -88,6 +90,8 @@ Deno.serve(async (req) => {
 - Propose these solutions: ${(analysisData.recommended_solutions || []).join("; ")}`
       : "";
 
+    const bookingContext = bookingLink ? `\n- Include a booking link for a free consultation: ${bookingLink}` : "";
+
     const templatePrompts: Record<string, string> = {
       first_touch: `You are Emmanuel Kigen, a freelance web developer reaching out personally to ${lead.business_name}, a ${lead.category || "business"} in ${lead.location || "Kenya"}.
 
@@ -97,7 +101,7 @@ Write a compelling personal cold email:
 - Mention specific pain points for ${lead.category || "their"} businesses (e.g., manual booking, no online ordering, no customer reviews visibility)
 - Present yourself as a freelance web developer who personally offers: ${services}${portfolioContext}${analysisContext}
 - Keep it personal, warm, and genuine — you're a real person reaching out, not a company
-- End with a soft call-to-action (suggest a brief call or WhatsApp chat)
+- End with a soft call-to-action (suggest a brief call or WhatsApp chat)${bookingContext}
 - Sign off as Emmanuel Kigen
 ${signature ? `- Use this signature: ${signature}` : ""}
 

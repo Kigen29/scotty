@@ -15,6 +15,7 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import {
   Search, Globe, Phone, Mail, MapPin, CheckCircle2, X, Loader2, Star, Brain,
   ExternalLink, ChevronUp, ChevronDown, Users, Filter, ArrowUpDown, Trash2, Cpu, Zap, Flame,
+  ShieldCheck, ShieldAlert, ShieldX,
 } from "lucide-react";
 
 const categories = [
@@ -43,6 +44,7 @@ const LeadDiscovery = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [generatingEmail, setGeneratingEmail] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
 
   // Discovery form
   const [discCategory, setDiscCategory] = useState("");
@@ -162,6 +164,30 @@ const LeadDiscovery = () => {
     if (!error) {
       fetchLeads();
       toast({ title: "Lead deleted" });
+    }
+  };
+
+  const verifyEmails = async (leadIds?: string[]) => {
+    const ids = leadIds || Array.from(selected);
+    const withEmail = ids.length > 0
+      ? leads.filter((l) => ids.includes(l.id) && l.email).map((l) => l.id)
+      : leads.filter((l) => l.email && l.email_verified === null).map((l) => l.id);
+    if (withEmail.length === 0) {
+      toast({ title: "No emails to verify", variant: "destructive" });
+      return;
+    }
+    setVerifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("verify-email", {
+        body: { lead_ids: withEmail },
+      });
+      if (error) throw error;
+      toast({ title: "Verification complete", description: `${data.verified} valid, ${data.failed} invalid` });
+      fetchLeads();
+    } catch (error: any) {
+      toast({ title: "Verification failed", description: error.message, variant: "destructive" });
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -344,6 +370,9 @@ const LeadDiscovery = () => {
           <Button size="sm" variant="outline" onClick={() => bulkUpdateStatus("qualified")}>
             <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
           </Button>
+          <Button size="sm" variant="outline" onClick={() => verifyEmails()} disabled={verifying}>
+            <ShieldCheck className="h-3.5 w-3.5 mr-1" /> {verifying ? "Verifying..." : "Verify Emails"}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => bulkUpdateStatus("dismissed")}>
             <X className="h-3.5 w-3.5 mr-1" /> Dismiss
           </Button>
@@ -407,7 +436,18 @@ const LeadDiscovery = () => {
                   <TableCell className="text-sm">{lead.phone || <span className="text-muted-foreground">—</span>}</TableCell>
                   <TableCell className="text-sm">
                     {lead.email ? (
-                      <span className="text-foreground">{lead.email}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-foreground truncate max-w-[160px]">{lead.email}</span>
+                        {lead.email_verified === true && (
+                          <span title={`Verified: ${lead.email_verification_status}`}><ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" /></span>
+                        )}
+                        {lead.email_verified === false && (
+                          <span title={`Failed: ${lead.email_verification_status}`}><ShieldX className="h-3.5 w-3.5 text-destructive shrink-0" /></span>
+                        )}
+                        {lead.email_verified === null && (
+                          <span title="Not verified"><ShieldAlert className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" /></span>
+                        )}
+                      </div>
                     ) : (
                       <Badge variant="outline" className="text-xs text-muted-foreground">No email</Badge>
                     )}

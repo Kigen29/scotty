@@ -77,6 +77,14 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Block sending to emails that failed verification
+    if (lead.email_verified === false) {
+      return new Response(JSON.stringify({ error: `Email verification failed: ${lead.email_verification_status || "invalid"}. Verify the email first.` }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Get sender email from settings
     const { data: settings } = await supabase
       .from("settings")

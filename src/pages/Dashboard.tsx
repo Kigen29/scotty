@@ -4,14 +4,14 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { Users, Mail, MessageSquare, TrendingUp, Flame, Star, Zap, Send, Gauge } from "lucide-react";
+import { Users, Mail, MessageSquare, TrendingUp, Flame, Star, Zap, Send, Gauge, CalendarDays } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const Dashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState({
-    totalLeads: 0, qualified: 0, contacted: 0, responded: 0, interested: 0, notInterested: 0, emailsSent: 0, drafts: 0, responseRate: 0,
+    totalLeads: 0, qualified: 0, contacted: 0, responded: 0, interested: 0, notInterested: 0, emailsSent: 0, drafts: 0, responseRate: 0, meetingsBooked: 0,
   });
   const [activities, setActivities] = useState<any[]>([]);
   const [hotLeads, setHotLeads] = useState<any[]>([]);
@@ -23,12 +23,13 @@ const Dashboard = () => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    const [{ data: leads }, { data: emails }, { data: logs }, { data: settingsData }, { count: sentToday }] = await Promise.all([
+    const [{ data: leads }, { data: emails }, { data: logs }, { data: settingsData }, { count: sentToday }, { count: meetingsCount }] = await Promise.all([
       supabase.from("leads").select("*").eq("user_id", user.id),
       supabase.from("email_campaigns").select("*").eq("user_id", user.id),
       supabase.from("activity_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(15),
       supabase.from("settings").select("daily_send_limit").eq("user_id", user.id).maybeSingle(),
       supabase.from("email_campaigns").select("id", { count: "exact", head: true }).eq("user_id", user.id).gte("sent_at", todayStart.toISOString()),
+      supabase.from("meetings").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     ]);
 
     if (leads) {
@@ -43,6 +44,7 @@ const Dashboard = () => {
         emailsSent: emails?.filter((e) => e.status === "sent").length || 0,
         drafts: emails?.filter((e) => e.status === "draft").length || 0,
         responseRate: contacted > 0 ? Math.round((responded / contacted) * 100) : 0,
+        meetingsBooked: meetingsCount || 0,
       });
       setHotLeads(
         leads.filter((l: any) => l.status === "interested" || (l.priority_score && l.priority_score >= 8))
@@ -83,6 +85,7 @@ const Dashboard = () => {
     { label: "EMAILS SENT", value: stats.emailsSent, icon: Send, accent: "text-blue-500", sub: `${stats.drafts} drafts` },
     { label: "RESPONSE RATE", value: `${stats.responseRate}%`, icon: MessageSquare, accent: "text-amber-500" },
     { label: "INTERESTED", value: stats.interested, icon: TrendingUp, accent: "text-emerald-500" },
+    { label: "MEETINGS", value: stats.meetingsBooked, icon: CalendarDays, accent: "text-violet-500" },
   ];
 
   // Pipeline data
@@ -113,7 +116,7 @@ const Dashboard = () => {
       </div>
 
       {/* Hero Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {metricCards.map((card) => (
           <Card key={card.label} className="relative overflow-hidden">
             <CardContent className="p-5">

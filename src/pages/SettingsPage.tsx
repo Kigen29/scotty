@@ -9,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search, Key } from "lucide-react";
+import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search, Key, CalendarDays } from "lucide-react";
 import { ICPProfileCard } from "@/components/settings/ICPProfileCard";
 
 interface PortfolioProject {
@@ -40,6 +40,7 @@ const SettingsPage = () => {
     social_discovery_enabled: true,
     whatsapp_number: "",
     discovery_pipeline: "firecrawl",
+    booking_link: "",
   });
   const [portfolioProjects, setPortfolioProjects] = useState<PortfolioProject[]>([]);
   const [newService, setNewService] = useState("");
@@ -72,6 +73,7 @@ const SettingsPage = () => {
         social_discovery_enabled: (data as any).social_discovery_enabled ?? true,
         whatsapp_number: (data as any).whatsapp_number || "",
         discovery_pipeline: (data as any).discovery_pipeline || "firecrawl",
+        booking_link: (data as any).booking_link || "",
       });
       setPortfolioProjects((data as any).portfolio_projects || []);
     }
@@ -266,6 +268,21 @@ const SettingsPage = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5"><Label className="text-xs">Sender Email</Label><Input value={settings.sender_email} onChange={(e) => setSettings((s) => ({ ...s, sender_email: e.target.value }))} placeholder="you@example.com" className="h-9" /></div>
             <div className="space-y-1.5"><Label className="text-xs">Daily Limit</Label><Input type="number" value={settings.daily_send_limit} onChange={(e) => setSettings((s) => ({ ...s, daily_send_limit: parseInt(e.target.value) || 50 }))} className="h-9" /></div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Meeting Booking */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Meeting Booking</CardTitle>
+          <CardDescription className="text-xs">Auto-include booking link when leads show interest</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Calendly / Cal.com Link</Label>
+            <Input value={settings.booking_link} onChange={(e) => setSettings((s) => ({ ...s, booking_link: e.target.value }))} placeholder="https://calendly.com/your-name/30min" className="h-9" />
+            <p className="text-[10px] text-muted-foreground">This link will be added to outreach emails for interested leads</p>
           </div>
         </CardContent>
       </Card>
