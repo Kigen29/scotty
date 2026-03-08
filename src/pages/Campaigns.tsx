@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { Mail, Send, Clock, Loader2, Copy, MessageCircle, Instagram, Linkedin, Pencil } from "lucide-react";
+import { Mail, Send, Clock, Loader2, Copy, MessageCircle, Instagram, Linkedin, Pencil, Bot, User, SendHorizonal } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { DateFilter, type DateRange } from "@/components/DateFilter";
 
@@ -41,6 +41,7 @@ const Campaigns = () => {
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [channelFilter, setChannelFilter] = useState("all");
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [bulkSending, setBulkSending] = useState(false);
 
   // Edit state
   const [editing, setEditing] = useState(false);
@@ -71,6 +72,27 @@ const Campaigns = () => {
     } catch (error: any) {
       toast({ title: "Send failed", description: error.message, variant: "destructive" });
     } finally { setSendingId(null); }
+  };
+
+  const sendAllDrafts = async () => {
+    const drafts = filtered.filter((c) => c.status === "draft" && ((c as any).channel === "email" || !(c as any).channel) && (c as any).leads?.email);
+    if (drafts.length === 0) {
+      toast({ title: "No sendable drafts", description: "No email drafts with valid lead emails found." });
+      return;
+    }
+    setBulkSending(true);
+    let sent = 0;
+    let failed = 0;
+    for (const draft of drafts) {
+      try {
+        const { data, error } = await supabase.functions.invoke("send-email", { body: { campaign_id: draft.id } });
+        if (error || data?.error) { failed++; continue; }
+        sent++;
+      } catch { failed++; }
+    }
+    toast({ title: "Bulk send complete", description: `${sent} sent, ${failed} failed` });
+    fetchCampaigns();
+    setBulkSending(false);
   };
 
   const copyMsg = (e: React.MouseEvent, body: string) => {
@@ -110,15 +132,25 @@ const Campaigns = () => {
     return true;
   });
 
+  const draftCount = filtered.filter((c) => c.status === "draft" && ((c as any).channel === "email" || !(c as any).channel) && (c as any).leads?.email).length;
+
   const templateLabel: Record<string, string> = {
     first_touch: "First Touch", follow_up_1: "Follow-up #1", follow_up_2: "Follow-up #2", final_follow_up: "Final",
   };
 
   return (
     <div className="p-4 md:p-6 space-y-4">
-      <div>
-        <h1 className="text-xl md:text-2xl font-bold">Campaigns</h1>
-        <p className="text-sm text-muted-foreground">AI-crafted outreach across all channels</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold">Campaigns</h1>
+          <p className="text-sm text-muted-foreground">AI-crafted outreach across all channels</p>
+        </div>
+        {draftCount > 0 && (
+          <Button size="sm" className="h-8 text-xs gap-1.5" onClick={sendAllDrafts} disabled={bulkSending}>
+            {bulkSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SendHorizonal className="h-3.5 w-3.5" />}
+            Send All Drafts ({draftCount})
+          </Button>
+        )}
       </div>
 
       <DateFilter defaultPreset="all" onChange={setDateRange} />
@@ -153,6 +185,7 @@ const Campaigns = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="text-xs">Source</TableHead>
                       <TableHead className="text-xs">Subject</TableHead>
                       <TableHead className="text-xs hidden md:table-cell">Lead</TableHead>
                       <TableHead className="text-xs">Channel</TableHead>
@@ -166,8 +199,15 @@ const Campaigns = () => {
                     {(tab === "all" ? filtered : filtered.filter((c) => c.status === tab)).map((campaign) => {
                       const ch = (campaign as any).channel || "email";
                       const lead = (campaign as any).leads;
+                      const isAuto = (campaign as any).source === "auto_agent";
                       return (
                         <TableRow key={campaign.id} className="cursor-pointer hover:bg-muted/50" onClick={() => { setSelectedEmail(campaign); setEditing(false); }}>
+                          <TableCell>
+                            <Badge variant="outline" className={`text-[10px] gap-1 ${isAuto ? "border-primary/40 text-primary" : ""}`}>
+                              {isAuto ? <Bot className="h-2.5 w-2.5" /> : <User className="h-2.5 w-2.5" />}
+                              {isAuto ? "Auto" : "Manual"}
+                            </Badge>
+                          </TableCell>
                           <TableCell className="font-medium text-sm truncate max-w-[220px]">{campaign.subject}</TableCell>
                           <TableCell className="text-xs text-muted-foreground hidden md:table-cell">{lead?.business_name || "—"}</TableCell>
                           <TableCell>
@@ -196,7 +236,7 @@ const Campaigns = () => {
                     })}
                     {filtered.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                        <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                           <Mail className="h-8 w-8 mx-auto mb-2 opacity-50" />
                           <p>No campaigns yet</p>
                         </TableCell>
@@ -219,6 +259,9 @@ const Campaigns = () => {
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="gap-1">{channelIcon[(selectedEmail as any).channel || "email"]} {((selectedEmail as any).channel || "email").replace("_", " ")}</Badge>
                 <Badge className={`border-0 ${statusColor[selectedEmail.status]}`}>{selectedEmail.status}</Badge>
+                <Badge variant="outline" className={`text-[10px] gap-1 ${(selectedEmail as any).source === "auto_agent" ? "border-primary/40 text-primary" : ""}`}>
+                  {(selectedEmail as any).source === "auto_agent" ? <><Bot className="h-2.5 w-2.5" /> Auto</> : <><User className="h-2.5 w-2.5" /> Manual</>}
+                </Badge>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Subject</p>
