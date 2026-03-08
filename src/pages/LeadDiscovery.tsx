@@ -44,6 +44,7 @@ const LeadDiscovery = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [generatingEmail, setGeneratingEmail] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
 
   // Discovery form
   const [discCategory, setDiscCategory] = useState("");
