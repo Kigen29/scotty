@@ -58,6 +58,13 @@ const KanbanCard = ({ lead, onClick, assigneeName }: KanbanCardProps) => {
         {lead.email && <Mail className="h-2.5 w-2.5 text-emerald-500 shrink-0" />}
         {lead.phone && <Phone className="h-2.5 w-2.5 text-blue-500 shrink-0" />}
       </div>
+
+      {assigneeName && (
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <UserCircle className="h-2.5 w-2.5 shrink-0" />
+          <span className="truncate">{assigneeName}</span>
+        </div>
+      )}
     </div>
   );
 };
