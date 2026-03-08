@@ -336,13 +336,16 @@ const LeadDiscovery = () => {
 
       {/* Bulk actions */}
       {selected.size > 0 && (
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20 flex-wrap">
           <span className="text-sm font-medium">{selected.size} selected</span>
           <Button size="sm" variant="outline" onClick={() => bulkUpdateStatus("qualified")}>
             <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
           </Button>
           <Button size="sm" variant="outline" onClick={() => bulkUpdateStatus("dismissed")}>
-            <Trash2 className="h-3.5 w-3.5 mr-1" /> Dismiss
+            <X className="h-3.5 w-3.5 mr-1" /> Dismiss
+          </Button>
+          <Button size="sm" variant="destructive" onClick={bulkDelete}>
+            <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
         </div>
