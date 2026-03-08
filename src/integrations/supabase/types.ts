@@ -146,6 +146,7 @@ export type Database = {
           opened_at: string | null
           scheduled_for: string | null
           sent_at: string | null
+          source: string | null
           status: string
           subject: string
           template_type: string
@@ -163,6 +164,7 @@ export type Database = {
           opened_at?: string | null
           scheduled_for?: string | null
           sent_at?: string | null
+          source?: string | null
           status?: string
           subject: string
           template_type?: string
@@ -180,6 +182,7 @@ export type Database = {
           opened_at?: string | null
           scheduled_for?: string | null
           sent_at?: string | null
+          source?: string | null
           status?: string
           subject?: string
           template_type?: string

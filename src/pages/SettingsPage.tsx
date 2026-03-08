@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search, Key, CalendarDays, Users, User, Mail, Zap, Target } from "lucide-react";
+import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search, Key, CalendarDays, Users, User, Mail, Zap, Target, AlertTriangle } from "lucide-react";
 import { ICPProfileCard } from "@/components/settings/ICPProfileCard";
 import TeamSettings from "@/components/settings/TeamSettings";
 
@@ -285,9 +285,18 @@ const SettingsPage = () => {
             <CardHeader className="pb-3"><CardTitle className="text-base">Email Config</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5"><Label className="text-xs">Sender Email</Label><Input value={settings.sender_email} onChange={(e) => setSettings((s) => ({ ...s, sender_email: e.target.value }))} placeholder="you@example.com" className="h-9" /></div>
+                <div className="space-y-1.5"><Label className="text-xs">Sender Email</Label><Input value={settings.sender_email} onChange={(e) => setSettings((s) => ({ ...s, sender_email: e.target.value }))} placeholder="you@yourdomain.com" className="h-9" /></div>
                 <div className="space-y-1.5"><Label className="text-xs">Daily Limit</Label><Input type="number" value={settings.daily_send_limit} onChange={(e) => setSettings((s) => ({ ...s, daily_send_limit: parseInt(e.target.value) || 50 }))} className="h-9" /></div>
               </div>
+              {settings.sender_email && /(@gmail\.com|@yahoo\.com|@hotmail\.com|@outlook\.com|@aol\.com|@icloud\.com)$/i.test(settings.sender_email) && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-medium text-amber-800 dark:text-amber-300">Free email provider</p>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">Resend cannot send from Gmail/Yahoo. Auto-sent emails will use <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">onboarding@resend.dev</code>. For a custom sender, verify your own domain at resend.com.</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

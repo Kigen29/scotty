@@ -6,6 +6,13 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const FREE_EMAIL_DOMAINS = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "aol.com", "icloud.com", "mail.com", "protonmail.com"];
+
+function isFreeEmail(email: string): boolean {
+  const domain = email.split("@")[1]?.toLowerCase();
+  return FREE_EMAIL_DOMAINS.includes(domain);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -33,6 +40,9 @@ Deno.serve(async (req) => {
     }
 
     let totalOutreach = 0;
+    let totalSent = 0;
+    let totalErrors = 0;
+    const errors: string[] = [];
 
     for (const userSettings of allSettings) {
       const dailyLimit = userSettings.daily_send_limit || 20;
@@ -42,6 +52,10 @@ Deno.serve(async (req) => {
       const signature = userSettings.email_signature || "Best regards,\nEmmanuel Kigen";
       const portfolio = userSettings.portfolio_links?.join(", ") || "";
       const portfolioProjects = (userSettings as any).portfolio_projects || [];
+
+      // Determine sending capability
+      const canAutoSend = RESEND_API_KEY && senderEmail && !isFreeEmail(senderEmail);
+      const useOnboardingSender = RESEND_API_KEY && senderEmail && isFreeEmail(senderEmail);
 
       // Get today's leads that haven't been contacted yet, sorted by priority
       const { data: hotLeads } = await supabase
@@ -85,7 +99,6 @@ Deno.serve(async (req) => {
         let contactValue = lead.email || "";
 
         if (!lead.email) {
-          // Try other channels
           const whatsapp = contactChannels.find((c: any) => c.type === "whatsapp");
           const igDm = contactChannels.find((c: any) => c.type === "instagram_dm");
           const linkedin = contactChannels.find((c: any) => c.type === "linkedin");
@@ -100,7 +113,7 @@ Deno.serve(async (req) => {
             channel = "linkedin";
             contactValue = linkedin.url || "";
           } else {
-            continue; // No contact method available
+            continue;
           }
         }
 
@@ -176,7 +189,11 @@ ${signature ? `- Signature: ${signature}` : ""}
             }),
           });
 
-          if (!aiResponse.ok) continue;
+          if (!aiResponse.ok) {
+            totalErrors++;
+            errors.push(`AI failed for ${lead.business_name}: ${aiResponse.status}`);
+            continue;
+          }
 
           const aiData = await aiResponse.json();
           const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
@@ -184,7 +201,7 @@ ${signature ? `- Signature: ${signature}` : ""}
 
           const message = JSON.parse(toolCall.function.arguments);
 
-          // Save campaign
+          // Save campaign with source = 'auto_agent'
           const { data: campaign } = await supabase.from("email_campaigns").insert({
             user_id: userSettings.user_id,
             lead_id: lead.id,
@@ -193,12 +210,25 @@ ${signature ? `- Signature: ${signature}` : ""}
             template_type: "first_touch",
             status: "draft",
             channel,
+            source: "auto_agent",
           }).select("id").single();
 
           if (!campaign) continue;
+          totalOutreach++;
 
           // Auto-send emails via Resend
-          if (channel === "email" && lead.email && RESEND_API_KEY && senderEmail) {
+          if (channel === "email" && lead.email && RESEND_API_KEY) {
+            // Determine the 'from' address
+            let fromAddress = "";
+            if (canAutoSend) {
+              fromAddress = senderEmail;
+            } else if (useOnboardingSender) {
+              fromAddress = "onboarding@resend.dev";
+            } else {
+              // No valid sender, keep as draft
+              continue;
+            }
+
             try {
               const sendResponse = await fetch("https://api.resend.com/emails", {
                 method: "POST",
@@ -207,7 +237,7 @@ ${signature ? `- Signature: ${signature}` : ""}
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                  from: `${senderName} <${senderEmail}>`,
+                  from: `${senderName} <${fromAddress}>`,
                   to: [lead.email],
                   subject: message.subject,
                   text: message.body,
@@ -225,23 +255,45 @@ ${signature ? `- Signature: ${signature}` : ""}
                 await supabase.from("activity_logs").insert({
                   user_id: userSettings.user_id,
                   action: "auto_email_sent",
-                  details: { business_name: lead.business_name, to: lead.email, channel },
+                  details: { business_name: lead.business_name, to: lead.email, channel, from: fromAddress },
+                });
+                totalSent++;
+              } else {
+                const errBody = await sendResponse.text();
+                totalErrors++;
+                errors.push(`Resend failed for ${lead.business_name}: ${errBody}`);
+                // Log the failure
+                await supabase.from("activity_logs").insert({
+                  user_id: userSettings.user_id,
+                  action: "auto_email_failed",
+                  details: { business_name: lead.business_name, to: lead.email, error: errBody },
                 });
               }
             } catch (sendErr) {
+              totalErrors++;
+              errors.push(`Send error for ${lead.business_name}: ${sendErr}`);
               console.error(`Send failed for ${lead.business_name}:`, sendErr);
             }
           }
-
-          totalOutreach++;
         } catch (err) {
+          totalErrors++;
+          errors.push(`Outreach error for ${lead.business_name}: ${err}`);
           console.error(`Outreach failed for ${lead.business_name}:`, err);
         }
       }
     }
 
+    // Log the run summary
+    if (allSettings.length > 0) {
+      await supabase.from("activity_logs").insert({
+        user_id: allSettings[0].user_id,
+        action: "auto_outreach_run",
+        details: { total_drafts: totalOutreach, total_sent: totalSent, total_errors: totalErrors, errors: errors.slice(0, 5) },
+      });
+    }
+
     return new Response(
-      JSON.stringify({ success: true, total_outreach: totalOutreach }),
+      JSON.stringify({ success: true, total_drafts: totalOutreach, total_sent: totalSent, total_errors: totalErrors, errors: errors.slice(0, 5) }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

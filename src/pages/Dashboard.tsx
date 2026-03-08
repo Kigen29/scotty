@@ -1,12 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useTeam } from "@/hooks/useTeam";
-import { Users, Mail, MessageSquare, TrendingUp, Flame, Star, Zap, Send, Gauge, CalendarDays, UserCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Users, Mail, MessageSquare, TrendingUp, Flame, Star, Zap, Send, Gauge, CalendarDays, UserCircle, Bot, Loader2, Play, AlertTriangle } from "lucide-react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import ExportableChart from "@/components/ExportableChart";
@@ -21,6 +23,7 @@ const PIPELINE_COLORS = [
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const { members, teamId } = useTeam();
   const [stats, setStats] = useState({
     totalLeads: 0, qualified: 0, contacted: 0, responded: 0, interested: 0, notInterested: 0, emailsSent: 0, drafts: 0, responseRate: 0, meetingsBooked: 0,
@@ -31,6 +34,12 @@ const Dashboard = () => {
   const [chartData, setChartData] = useState<any[]>([]);
   const [quota, setQuota] = useState({ sent: 0, limit: 50 });
 
+  // Agent state
+  const [agentStats, setAgentStats] = useState({ autoDrafts: 0, autoSent: 0, autoFailed: 0, lastRun: null as string | null });
+  const [runningOutreach, setRunningOutreach] = useState(false);
+  const [outreachResult, setOutreachResult] = useState<any>(null);
+  const [senderWarning, setSenderWarning] = useState(false);
+
   const fetchAll = useCallback(async () => {
     if (!user) return;
     const todayStart = new Date();
@@ -40,10 +49,16 @@ const Dashboard = () => {
       supabase.from("leads").select("*").eq("user_id", user.id),
       supabase.from("email_campaigns").select("*").eq("user_id", user.id),
       supabase.from("activity_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(15),
-      supabase.from("settings").select("daily_send_limit").eq("user_id", user.id).maybeSingle(),
+      supabase.from("settings").select("daily_send_limit, sender_email").eq("user_id", user.id).maybeSingle(),
       supabase.from("email_campaigns").select("id", { count: "exact", head: true }).eq("user_id", user.id).gte("sent_at", todayStart.toISOString()),
       supabase.from("meetings").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     ]);
+
+    // Check sender email warning
+    const sEmail = settingsData?.sender_email || "";
+    const freeDomains = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "aol.com", "icloud.com"];
+    const domain = sEmail.split("@")[1]?.toLowerCase();
+    setSenderWarning(!!domain && freeDomains.includes(domain));
 
     if (leads) {
       const contacted = leads.filter((l) => l.status === "contacted").length;
@@ -78,7 +93,31 @@ const Dashboard = () => {
       });
       setChartData(days);
     }
-    if (logs) setActivities(logs);
+
+    // Agent stats
+    if (emails) {
+      const autoCampaigns = emails.filter((e: any) => e.source === "auto_agent");
+      setAgentStats({
+        autoDrafts: autoCampaigns.filter((e) => e.status === "draft").length,
+        autoSent: autoCampaigns.filter((e) => e.status === "sent").length,
+        autoFailed: 0,
+        lastRun: null,
+      });
+    }
+
+    // Find last outreach run from logs
+    if (logs) {
+      setActivities(logs);
+      const lastRunLog = logs.find((l: any) => l.action === "auto_outreach_run");
+      if (lastRunLog) {
+        setAgentStats((prev) => ({
+          ...prev,
+          lastRun: lastRunLog.created_at,
+          autoFailed: (lastRunLog.details as any)?.total_errors || 0,
+        }));
+      }
+    }
+
     setQuota({
       sent: sentToday || 0,
       limit: settingsData?.daily_send_limit || 50,
@@ -111,6 +150,22 @@ const Dashboard = () => {
   useRealtimeSubscription("email_campaigns", user?.id, fetchAll);
   useRealtimeSubscription("activity_logs", user?.id, fetchAll);
 
+  const runOutreachNow = async () => {
+    setRunningOutreach(true);
+    setOutreachResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("daily-outreach");
+      if (error) throw error;
+      setOutreachResult(data);
+      toast({ title: "Outreach complete", description: `${data?.total_drafts || 0} drafts, ${data?.total_sent || 0} sent` });
+      fetchAll();
+    } catch (err: any) {
+      toast({ title: "Outreach failed", description: err.message, variant: "destructive" });
+    } finally {
+      setRunningOutreach(false);
+    }
+  };
+
   const metricCards = [
     { label: "TOTAL LEADS", value: stats.totalLeads, icon: Users, accent: "text-primary" },
     { label: "EMAILS SENT", value: stats.emailsSent, icon: Send, accent: "text-blue-500", sub: `${stats.drafts} drafts` },
@@ -119,7 +174,6 @@ const Dashboard = () => {
     { label: "MEETINGS", value: stats.meetingsBooked, icon: CalendarDays, accent: "text-violet-500" },
   ];
 
-  // Pipeline data for vertical bar chart
   const pipelineData = [
     { label: "Discovered", count: stats.totalLeads },
     { label: "Qualified", count: stats.qualified },
@@ -184,6 +238,67 @@ const Dashboard = () => {
         ))}
       </div>
 
+      {/* Outreach Agent Panel */}
+      <Card className="border-primary/20">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Bot className="h-4 w-4 text-primary" /> Outreach Agent
+            </CardTitle>
+            <Button size="sm" className="h-8 text-xs gap-1.5" onClick={runOutreachNow} disabled={runningOutreach}>
+              {runningOutreach ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+              {runningOutreach ? "Running..." : "Run Now"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {senderWarning && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+              <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-amber-800 dark:text-amber-300">Free email provider detected</p>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                  Your sender email uses Gmail/Yahoo. Emails will be sent from <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">onboarding@resend.dev</code> instead. For custom sender, add a verified domain in Resend.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center p-3 rounded-lg bg-muted/50">
+              <p className="text-2xl font-bold">{agentStats.autoDrafts}</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pending Drafts</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-muted/50">
+              <p className="text-2xl font-bold text-emerald-600">{agentStats.autoSent}</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Auto-Sent</p>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-muted/50">
+              <p className="text-2xl font-bold text-destructive">{agentStats.autoFailed}</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Failed</p>
+            </div>
+          </div>
+
+          {agentStats.lastRun && (
+            <p className="text-xs text-muted-foreground">Last run: {relativeTime(agentStats.lastRun)}</p>
+          )}
+
+          {outreachResult && (
+            <div className="p-3 rounded-lg bg-muted/50 space-y-1">
+              <p className="text-xs font-medium">Latest run results:</p>
+              <p className="text-xs text-muted-foreground">{outreachResult.total_drafts} drafts created • {outreachResult.total_sent} emails sent • {outreachResult.total_errors} errors</p>
+              {outreachResult.errors?.length > 0 && (
+                <div className="mt-1.5">
+                  {outreachResult.errors.map((e: string, i: number) => (
+                    <p key={i} className="text-[10px] text-destructive truncate">{e}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Daily Quota */}
       <Card>
         <CardContent className="p-5">
@@ -206,7 +321,7 @@ const Dashboard = () => {
         </CardContent>
       </Card>
 
-      {/* Pipeline — vertical bar chart */}
+      {/* Pipeline */}
       <ExportableChart title="Pipeline" fileName="pipeline">
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={pipelineData} barCategoryGap="20%">
@@ -293,7 +408,7 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Activity Feed with Team Tab */}
+      {/* Activity Feed */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Activity</CardTitle>
@@ -316,8 +431,8 @@ const Dashboard = () => {
                 <div className="space-y-1.5">
                   {activities.map((a) => (
                     <div key={a.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors">
-                      <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-                        <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+                      <div className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 ${a.action?.startsWith("auto_") ? "bg-primary/10" : "bg-muted"}`}>
+                        {a.action?.startsWith("auto_") ? <Bot className="h-3.5 w-3.5 text-primary" /> : <Zap className="h-3.5 w-3.5 text-muted-foreground" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <span className="text-sm">{a.action?.replace(/_/g, " ")}</span>
