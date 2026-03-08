@@ -342,6 +342,7 @@ const LeadDiscovery = () => {
                 <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("priority_score")}>
                   <span className="flex items-center">Priority <SortIcon col="priority_score" /></span>
                 </TableHead>
+                <TableHead>Source</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
