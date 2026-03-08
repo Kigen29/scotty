@@ -132,6 +132,11 @@ const Sequences = () => {
   const [leadsLoading, setLeadsLoading] = useState(false);
   const [leadSearch, setLeadSearch] = useState("");
 
+  // Manage enrollments state
+  const [manageSeqId, setManageSeqId] = useState<string | null>(null);
+  const [enrollments, setEnrollments] = useState<{ id: string; lead_id: string; status: string; current_step: number; business_name: string; email: string | null }[]>([]);
+  const [enrollmentsLoading, setEnrollmentsLoading] = useState(false);
+
   useEffect(() => {
     if (user) {
       fetchSequences();
