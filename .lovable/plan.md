@@ -1,56 +1,44 @@
 
 
-## Plan: Fix Pipeline Routing and Add OpenAI Pipeline Option
+## Problem Diagnosis
 
-### Root Cause
+The outreach agent **is working** -- it's discovering leads and generating email drafts successfully. However, **none of the emails are actually being sent**. All 20+ campaigns are stuck in `draft` status with `sent_at: null`.
 
-The manual "Discover Leads" button on the Lead Discovery page calls `discover-leads` edge function directly, which **never checks the user's `discovery_pipeline` setting**. It always tries Firecrawl first, regardless of what you chose in Settings. The `auto-discover` function (cron job) does check the setting, but `discover-leads` (manual trigger) does not.
+**Root causes:**
 
-Additionally, `discover-leads/index.ts` has a **duplicate variable declaration** (`FIRECRAWL_API_KEY` on lines 51 and 62) which would cause a runtime error.
+1. **Resend requires a verified domain** -- Your sender email is `emmanuelkigen029@gmail.com`. Resend cannot send from Gmail addresses; it requires a custom domain (e.g., `you@yourdomain.com`). The Resend API call likely fails silently, or the condition check passes but the send returns an error.
 
----
+2. **No visibility into agent activity** -- The Campaigns page shows campaigns but there's no clear indicator of which were auto-generated vs manually created, and no outreach agent status/log panel.
 
-### Changes
+## Plan
 
-#### 1. Fix `discover-leads` to respect pipeline setting
+### 1. Add "Outreach Agent" activity panel to Dashboard
+- Add a new card/section showing recent autonomous outreach activity
+- Display: campaigns generated (drafts), emails sent, failures
+- Pull from `activity_logs` where `action LIKE 'auto%'` and from `email_campaigns` 
+- Show agent status: last run time, next scheduled run, total drafts pending
 
-Rewrite `supabase/functions/discover-leads/index.ts`:
-- Remove the duplicate `FIRECRAWL_API_KEY` declaration
-- After authenticating the user, fetch their `settings` row and read `discovery_pipeline`
-- If `lovable_ai`: skip Firecrawl entirely, use the AI-only prompt (existing fallback path)
-- If `openai`: use the OpenAI API key from secrets with the same discovery prompt
-- If `firecrawl` (default): use current Firecrawl logic with AI fallback
+### 2. Add "Source" badge to Campaigns page
+- Tag campaigns as "Auto" vs "Manual" based on `template_type = 'first_touch'` and whether they were created by the agent (check if there's an activity log with matching timestamp)
+- Simpler approach: add a `source` column to `email_campaigns` (values: `manual`, `auto_agent`) via migration
 
-#### 2. Add OpenAI pipeline option
+### 3. Add "Run Outreach Now" button on Dashboard
+- Button that invokes `daily-outreach` function on demand
+- Shows results: how many drafts created, how many sent, any errors
 
-**Database**: Add no schema changes needed -- `discovery_pipeline` is already a `text` column, so it can store `'openai'` as a value.
+### 4. Fix the sending issue
+- Update `daily-outreach` to use Resend's default `onboarding@resend.dev` sender when the user's sender email is a free email provider (Gmail, Yahoo, etc.), OR
+- Better: surface a clear warning in Settings that Resend requires a verified custom domain for auto-sending
+- For now, allow the agent to create drafts and show a "Send All Drafts" bulk action on the Campaigns page
 
-**New secret**: Use the `add_secret` tool to request the user's OpenAI API key (`OPENAI_API_KEY`).
+### Database Migration
+- Add `source` column to `email_campaigns`: `text DEFAULT 'manual'`
+- Update `daily-outreach` edge function to set `source: 'auto_agent'` when inserting campaigns
 
-**Edge functions** -- Update both `discover-leads` and `auto-discover` to handle `pipeline === 'openai'`:
-- Call `https://api.openai.com/v1/chat/completions` directly with the user's OpenAI API key
-- Use `gpt-4o-mini` as the default model (cost-effective for extraction)
-- Same tool-calling schema and prompts as the Lovable AI path, just different endpoint and auth
-
-#### 3. Update Settings UI
-
-Add a third radio option in the Discovery Pipeline card:
-- **Firecrawl** -- Web scraping via Firecrawl API
-- **Lovable AI** -- Uses built-in AI gateway (no extra keys needed)
-- **OpenAI** -- Uses your own OpenAI API key (GPT-4o-mini)
-
-#### 4. Update `auto-discover` routing
-
-Add `openai` case alongside the existing `lovable_ai` case. For OpenAI, run the same logic as `ai-discover` but swap the API endpoint and key.
-
----
-
-### Files to Modify
-
-| File | Change |
-|---|---|
-| `supabase/functions/discover-leads/index.ts` | Fix duplicate var, add pipeline routing (read settings, branch on firecrawl/lovable_ai/openai) |
-| `supabase/functions/auto-discover/index.ts` | Add `openai` pipeline routing case |
-| `supabase/functions/ai-discover/index.ts` | Add optional OpenAI mode (accept `pipeline` param in body) |
-| `src/pages/SettingsPage.tsx` | Add third "OpenAI" radio option with key icon |
+### Files to modify
+- `supabase/functions/daily-outreach/index.ts` -- set `source: 'auto_agent'`
+- `src/pages/Dashboard.tsx` -- add agent activity panel with last run info and "Run Now" button
+- `src/pages/Campaigns.tsx` -- show source badge (Auto/Manual), add bulk send action
+- `src/pages/SettingsPage.tsx` -- add warning about sender email needing a verified domain
+- New migration for `source` column
 
