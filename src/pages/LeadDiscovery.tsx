@@ -141,6 +141,27 @@ const LeadDiscovery = () => {
     }
   };
 
+  const analyzeLead = async (leadId: string) => {
+    try {
+      const { error } = await supabase.functions.invoke("analyze-lead", {
+        body: { lead_id: leadId },
+      });
+      if (error) throw error;
+      toast({ title: "Lead analyzed", description: "AI analysis complete" });
+      fetchLeads();
+    } catch (error: any) {
+      toast({ title: "Analysis failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const deleteLead = async (leadId: string) => {
+    const { error } = await supabase.from("leads").delete().eq("id", leadId);
+    if (!error) {
+      fetchLeads();
+      toast({ title: "Lead deleted" });
+    }
+  };
+
   const bulkUpdateStatus = async (status: string) => {
     const ids = Array.from(selected);
     if (ids.length === 0) return;
@@ -150,6 +171,17 @@ const LeadDiscovery = () => {
     setSelected(new Set());
     fetchLeads();
     toast({ title: `${ids.length} leads updated to ${status}` });
+  };
+
+  const bulkDelete = async () => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    for (const id of ids) {
+      await supabase.from("leads").delete().eq("id", id);
+    }
+    setSelected(new Set());
+    fetchLeads();
+    toast({ title: `${ids.length} leads deleted` });
   };
 
   // Filtered & sorted
