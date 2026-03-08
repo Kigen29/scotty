@@ -116,7 +116,7 @@ const Dashboard = () => {
       </div>
 
       {/* Hero Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {metricCards.map((card) => (
           <Card key={card.label} className="relative overflow-hidden">
             <CardContent className="p-5">
