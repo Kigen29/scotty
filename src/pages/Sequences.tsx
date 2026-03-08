@@ -137,10 +137,30 @@ const Sequences = () => {
   const [enrollments, setEnrollments] = useState<{ id: string; lead_id: string; status: string; current_step: number; business_name: string; email: string | null }[]>([]);
   const [enrollmentsLoading, setEnrollmentsLoading] = useState(false);
 
+  // Enrollment counts per sequence
+  const [enrollmentCounts, setEnrollmentCounts] = useState<Record<string, number>>({});
+
+  const fetchEnrollmentCounts = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("sequence_enrollments")
+      .select("sequence_id, status")
+      .eq("user_id", user.id)
+      .in("status", ["active", "paused"]);
+    if (data) {
+      const counts: Record<string, number> = {};
+      data.forEach((e) => {
+        counts[e.sequence_id] = (counts[e.sequence_id] || 0) + 1;
+      });
+      setEnrollmentCounts(counts);
+    }
+  };
+
   useEffect(() => {
     if (user) {
       fetchSequences();
       fetchSavedTemplates();
+      fetchEnrollmentCounts();
     }
   }, [user]);
 
@@ -484,6 +504,7 @@ const Sequences = () => {
       toast({ title: `${selectedLeadIds.size} lead${selectedLeadIds.size > 1 ? "s" : ""} enrolled!` });
       setEnrollSeqId(null);
       setSelectedLeadIds(new Set());
+      fetchEnrollmentCounts();
     } catch (error: any) {
       toast({ title: "Enrollment failed", description: error.message, variant: "destructive" });
     } finally {
@@ -563,6 +584,7 @@ const Sequences = () => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Lead removed from sequence" });
+      fetchEnrollmentCounts();
       if (manageSeqId) openManageDialog(manageSeqId);
     }
   };
@@ -920,7 +942,14 @@ const Sequences = () => {
                     <div className="flex items-center gap-3">
                       <div className={`h-2 w-2 rounded-full ${seq.is_active ? "bg-emerald-500" : "bg-muted-foreground/30"}`} />
                       <div>
-                        <h3 className="text-sm font-medium">{seq.name}</h3>
+                        <h3 className="text-sm font-medium flex items-center gap-1.5">
+                          {seq.name}
+                          {(enrollmentCounts[seq.id!] ?? 0) > 0 && (
+                            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 font-normal">
+                              {enrollmentCounts[seq.id!]} enrolled
+                            </Badge>
+                          )}
+                        </h3>
                         <p className="text-xs text-muted-foreground">{seq.steps.length} step{seq.steps.length !== 1 ? "s" : ""}</p>
                       </div>
                     </div>
