@@ -30,6 +30,7 @@ const Pipeline = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [selectedLead, setSelectedLead] = useState<any | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const { members, assignLead } = useTeam();
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
