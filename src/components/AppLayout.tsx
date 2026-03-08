@@ -40,6 +40,7 @@ const AppLayout = () => {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { unreadActivity, newAssignments, markActivitySeen, markAssignmentsSeen } = useNotifications();
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     if (location.pathname === "/") markActivitySeen();
