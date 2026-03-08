@@ -370,6 +370,9 @@ const LeadDiscovery = () => {
         </div>
       </div>
 
+      {/* Date filter */}
+      <DateFilter defaultPreset="all" onChange={(range) => { setFilterDateRange(range); setPage(0); }} />
+
       {/* Filter bar */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 text-muted-foreground">
