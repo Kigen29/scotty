@@ -8,9 +8,10 @@ interface KanbanColumnProps {
   color: string;
   leads: any[];
   onCardClick?: (lead: any) => void;
+  memberMap?: Record<string, string>; // user_id -> display_name
 }
 
-const KanbanColumn = ({ id, label, color, leads, onCardClick }: KanbanColumnProps) => {
+const KanbanColumn = ({ id, label, color, leads, onCardClick, memberMap }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id });
 
   return (
@@ -35,7 +36,7 @@ const KanbanColumn = ({ id, label, color, leads, onCardClick }: KanbanColumnProp
       >
         <SortableContext items={leads.map((l) => l.id)} strategy={verticalListSortingStrategy}>
           {leads.map((lead) => (
-            <KanbanCard key={lead.id} lead={lead} onClick={() => onCardClick?.(lead)} />
+            <KanbanCard key={lead.id} lead={lead} onClick={() => onCardClick?.(lead)} assigneeName={lead.assigned_to && memberMap?.[lead.assigned_to]} />
           ))}
         </SortableContext>
 

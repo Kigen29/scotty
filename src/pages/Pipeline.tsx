@@ -4,13 +4,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useTeam } from "@/hooks/useTeam";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
-import { Star, Mail, Phone, MapPin, Globe, Search, X } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Star, Mail, Phone, MapPin, Globe, Search, X, UserCircle } from "lucide-react";
 import KanbanColumn from "@/components/pipeline/KanbanColumn";
 
 const STAGES = [
@@ -28,6 +30,7 @@ const Pipeline = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [selectedLead, setSelectedLead] = useState<any | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const { members, assignLead } = useTeam();
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
@@ -108,6 +111,11 @@ const Pipeline = () => {
   // Derive unique categories and locations for filter dropdowns
   const categories = useMemo(() => [...new Set(leads.map((l) => l.category).filter(Boolean))].sort(), [leads]);
   const locations = useMemo(() => [...new Set(leads.map((l) => l.location).filter(Boolean))].sort(), [leads]);
+  const memberMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    members.forEach((m) => { map[m.user_id] = m.display_name; });
+    return map;
+  }, [members]);
 
   const filteredLeads = useMemo(() => {
     return leads.filter((l) => {
@@ -225,6 +233,7 @@ const Pipeline = () => {
                 color={stage.color}
                 leads={filteredLeads.filter((l) => l.status === stage.id)}
                 onCardClick={setSelectedLead}
+                memberMap={memberMap}
               />
             ))}
           </div>
@@ -313,6 +322,43 @@ const Pipeline = () => {
                     Priority: {selectedLead.priority_score || 5}/10
                   </span>
                 </div>
+
+                {/* Assignment */}
+                {members.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs flex items-center gap-1.5">
+                      <UserCircle className="h-3.5 w-3.5" /> Assigned To
+                    </Label>
+                    <Select
+                      value={selectedLead.assigned_to || "unassigned"}
+                      onValueChange={async (v) => {
+                        const target = v === "unassigned" ? null : v;
+                        const { error } = await assignLead(selectedLead.id, target);
+                        if (!error) {
+                          setSelectedLead({ ...selectedLead, assigned_to: target });
+                          setLeads((prev) =>
+                            prev.map((l) =>
+                              l.id === selectedLead.id ? { ...l, assigned_to: target } : l
+                            )
+                          );
+                          toast({ title: target ? "Lead assigned" : "Assignment removed" });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Unassigned" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        {members.map((m) => (
+                          <SelectItem key={m.user_id} value={m.user_id}>
+                            {m.display_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {selectedLead.notes && (
                   <div>

@@ -9,8 +9,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search, Key, CalendarDays } from "lucide-react";
+import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search, Key, CalendarDays, Users } from "lucide-react";
 import { ICPProfileCard } from "@/components/settings/ICPProfileCard";
+import TeamSettings from "@/components/settings/TeamSettings";
 
 interface PortfolioProject {
   url: string;
@@ -327,6 +328,19 @@ const SettingsPage = () => {
               ))}
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Team Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Users className="h-4 w-4" /> Team
+          </CardTitle>
+          <CardDescription>Manage your team, invite members, and assign roles</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TeamSettings />
         </CardContent>
       </Card>
     </div>

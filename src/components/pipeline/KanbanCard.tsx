@@ -1,14 +1,15 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Badge } from "@/components/ui/badge";
-import { Star, Mail, Phone, MapPin } from "lucide-react";
+import { Star, Mail, Phone, MapPin, UserCircle } from "lucide-react";
 
 interface KanbanCardProps {
   lead: any;
   onClick?: () => void;
+  assigneeName?: string;
 }
 
-const KanbanCard = ({ lead, onClick }: KanbanCardProps) => {
+const KanbanCard = ({ lead, onClick, assigneeName }: KanbanCardProps) => {
   const {
     attributes,
     listeners,
@@ -57,6 +58,13 @@ const KanbanCard = ({ lead, onClick }: KanbanCardProps) => {
         {lead.email && <Mail className="h-2.5 w-2.5 text-emerald-500 shrink-0" />}
         {lead.phone && <Phone className="h-2.5 w-2.5 text-blue-500 shrink-0" />}
       </div>
+
+      {assigneeName && (
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <UserCircle className="h-2.5 w-2.5 shrink-0" />
+          <span className="truncate">{assigneeName}</span>
+        </div>
+      )}
     </div>
   );
 };
