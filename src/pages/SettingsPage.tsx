@@ -272,6 +272,21 @@ const SettingsPage = () => {
         </CardContent>
       </Card>
 
+      {/* Meeting Booking */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Meeting Booking</CardTitle>
+          <CardDescription className="text-xs">Auto-include booking link when leads show interest</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Calendly / Cal.com Link</Label>
+            <Input value={settings.booking_link} onChange={(e) => setSettings((s) => ({ ...s, booking_link: e.target.value }))} placeholder="https://calendly.com/your-name/30min" className="h-9" />
+            <p className="text-[10px] text-muted-foreground">This link will be added to outreach emails for interested leads</p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Automation */}
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Automation</CardTitle></CardHeader>
