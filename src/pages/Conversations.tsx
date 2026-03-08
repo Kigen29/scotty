@@ -34,7 +34,7 @@ const Conversations = () => {
     if (user) fetchConversations();
   }, [user, fetchConversations]);
 
-  useRealtimeSubscription("conversations", user?.id, fetchConversations);
+  useRealtimeSubscription("conversations", user?.id, fetchConversations, true);
 
   const sendReply = async () => {
     if (!user || !selectedLeadId || !replyText.trim()) return;

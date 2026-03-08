@@ -57,7 +57,7 @@ const Campaigns = () => {
 
   useEffect(() => { if (user) fetchCampaigns(); }, [user, fetchCampaigns]);
 
-  useRealtimeSubscription("email_campaigns", user?.id, fetchCampaigns);
+  useRealtimeSubscription("email_campaigns", user?.id, fetchCampaigns, true);
 
   const sendEmail = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
