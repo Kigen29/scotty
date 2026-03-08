@@ -80,6 +80,25 @@ const Dashboard = () => {
     if (user) fetchAll();
   }, [user, fetchAll]);
 
+  // Fetch team-wide activity
+  useEffect(() => {
+    if (!teamId || members.length === 0) {
+      setTeamActivities([]);
+      return;
+    }
+    const fetchTeamActivity = async () => {
+      const memberIds = members.map((m) => m.user_id);
+      const { data } = await supabase
+        .from("activity_logs")
+        .select("*")
+        .in("user_id", memberIds)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (data) setTeamActivities(data);
+    };
+    fetchTeamActivity();
+  }, [teamId, members]);
+
   useRealtimeSubscription("leads", user?.id, fetchAll);
   useRealtimeSubscription("email_campaigns", user?.id, fetchAll);
   useRealtimeSubscription("activity_logs", user?.id, fetchAll);
