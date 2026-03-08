@@ -6,6 +6,7 @@ import { Star, Mail, Phone, MapPin, UserCircle } from "lucide-react";
 interface KanbanCardProps {
   lead: any;
   onClick?: () => void;
+  assigneeName?: string;
 }
 
 const KanbanCard = ({ lead, onClick }: KanbanCardProps) => {
