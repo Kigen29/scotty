@@ -167,6 +167,30 @@ const LeadDiscovery = () => {
     }
   };
 
+  const verifyEmails = async (leadIds?: string[]) => {
+    const ids = leadIds || Array.from(selected);
+    const withEmail = ids.length > 0
+      ? leads.filter((l) => ids.includes(l.id) && l.email).map((l) => l.id)
+      : leads.filter((l) => l.email && l.email_verified === null).map((l) => l.id);
+    if (withEmail.length === 0) {
+      toast({ title: "No emails to verify", variant: "destructive" });
+      return;
+    }
+    setVerifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("verify-email", {
+        body: { lead_ids: withEmail },
+      });
+      if (error) throw error;
+      toast({ title: "Verification complete", description: `${data.verified} valid, ${data.failed} invalid` });
+      fetchLeads();
+    } catch (error: any) {
+      toast({ title: "Verification failed", description: error.message, variant: "destructive" });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const bulkUpdateStatus = async (status: string) => {
     const ids = Array.from(selected);
     if (ids.length === 0) return;
