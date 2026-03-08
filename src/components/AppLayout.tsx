@@ -5,16 +5,17 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useNotifications } from "@/hooks/useNotifications";
 
 const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/", icon: LayoutDashboard, label: "Dashboard", badgeKey: "activity" as const },
   { to: "/discovery", icon: Search, label: "Discovery" },
   { to: "/campaigns", icon: Mail, label: "Campaigns" },
   { to: "/sequences", icon: GitBranch, label: "Sequences" },
-  { to: "/pipeline", icon: Columns3, label: "Pipeline" },
+  { to: "/pipeline", icon: Columns3, label: "Pipeline", badgeKey: "assignments" as const },
   { to: "/conversations", icon: MessageSquare, label: "Conversations" },
   { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/deliverability", icon: ShieldCheck, label: "Deliverability" },
@@ -26,6 +27,19 @@ const AppLayout = () => {
   const location = useLocation();
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { unreadActivity, newAssignments, markActivitySeen, markAssignmentsSeen } = useNotifications();
+
+  // Mark as seen when navigating to relevant pages
+  useEffect(() => {
+    if (location.pathname === "/") markActivitySeen();
+    if (location.pathname === "/pipeline") markAssignmentsSeen();
+  }, [location.pathname, markActivitySeen, markAssignmentsSeen]);
+
+  const getBadgeCount = (key?: "activity" | "assignments") => {
+    if (key === "activity") return unreadActivity;
+    if (key === "assignments") return newAssignments;
+    return 0;
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -87,7 +101,12 @@ const AppLayout = () => {
               }
             >
               <item.icon className="h-4 w-4" />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {item.badgeKey && getBadgeCount(item.badgeKey) > 0 && (
+                <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground px-1.5">
+                  {getBadgeCount(item.badgeKey) > 99 ? "99+" : getBadgeCount(item.badgeKey)}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
