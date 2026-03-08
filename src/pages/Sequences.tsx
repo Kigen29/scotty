@@ -953,6 +953,18 @@ const Sequences = () => {
                         <UserPlus className="h-3.5 w-3.5 mr-1" />
                         Enroll Leads
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-[10px]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openManageDialog(seq.id);
+                        }}
+                      >
+                        <Users className="h-3.5 w-3.5 mr-1" />
+                        Manage
+                      </Button>
                       <Badge variant={seq.is_active ? "default" : "secondary"} className="text-[10px]">
                         {seq.is_active ? "Active" : "Paused"}
                       </Badge>
