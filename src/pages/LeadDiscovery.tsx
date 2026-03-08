@@ -110,7 +110,8 @@ const LeadDiscovery = () => {
         body: { category: discCategory, location: discLocation, query: searchQuery },
       });
       if (error) throw error;
-      toast({ title: "Discovery complete", description: `Found ${data?.leads_added || 0} new leads` });
+      const pipelineLabel = data?.pipeline === "openai" ? "OpenAI" : data?.pipeline === "lovable_ai" ? "Lovable AI" : "Firecrawl";
+      toast({ title: "Discovery complete", description: `Found ${data?.leads_added || 0} new leads via ${pipelineLabel}` });
       fetchLeads();
     } catch (error: any) {
       toast({ title: "Discovery failed", description: error.message, variant: "destructive" });
