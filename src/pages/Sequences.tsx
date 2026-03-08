@@ -584,6 +584,7 @@ const Sequences = () => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Lead removed from sequence" });
+      fetchEnrollmentCounts();
       if (manageSeqId) openManageDialog(manageSeqId);
     }
   };
