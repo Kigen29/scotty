@@ -238,6 +238,64 @@ Deno.serve(async (req) => {
           .update({ assigned_to: assigned_to || null })
           .eq("id", lead_id);
 
+        // Send email notification to the assignee
+        if (assigned_to) {
+          try {
+            const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+            if (RESEND_API_KEY) {
+              // Get assignee profile
+              const { data: assigneeProfile } = await supabase
+                .from("profiles")
+                .select("email, display_name")
+                .eq("id", assigned_to)
+                .maybeSingle();
+
+              // Get lead details
+              const { data: lead } = await supabase
+                .from("leads")
+                .select("business_name, location, category, email")
+                .eq("id", lead_id)
+                .maybeSingle();
+
+              // Get assigner profile
+              const { data: assignerProfile } = await supabase
+                .from("profiles")
+                .select("display_name")
+                .eq("id", userId)
+                .maybeSingle();
+
+              if (assigneeProfile?.email && lead) {
+                const resend = new Resend(RESEND_API_KEY);
+                const assignerName = assignerProfile?.display_name || "A teammate";
+                const assigneeName = assigneeProfile.display_name || "there";
+
+                await resend.emails.send({
+                  from: "ScoutAgent <onboarding@resend.dev>",
+                  to: [assigneeProfile.email],
+                  subject: `🎯 New lead assigned: ${lead.business_name}`,
+                  html: `
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px;">
+                      <h2 style="margin: 0 0 8px;">Hey ${assigneeName} 👋</h2>
+                      <p style="color: #555; margin: 0 0 20px;">${assignerName} assigned you a new lead.</p>
+                      <div style="background: #f8f9fa; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+                        <h3 style="margin: 0 0 8px;">${lead.business_name}</h3>
+                        ${lead.category ? `<p style="margin: 4px 0; color: #666;">📁 ${lead.category}</p>` : ""}
+                        ${lead.location ? `<p style="margin: 4px 0; color: #666;">📍 ${lead.location}</p>` : ""}
+                        ${lead.email ? `<p style="margin: 4px 0; color: #666;">✉️ ${lead.email}</p>` : ""}
+                      </div>
+                      <p style="color: #888; font-size: 13px;">Log in to ScoutAgent to take action on this lead.</p>
+                    </div>
+                  `,
+                });
+                console.log(`Assignment notification sent to ${assigneeProfile.email}`);
+              }
+            }
+          } catch (emailErr) {
+            // Don't fail the assignment if email fails
+            console.error("Failed to send assignment notification:", emailErr);
+          }
+        }
+
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
