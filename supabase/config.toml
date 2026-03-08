@@ -44,3 +44,9 @@ verify_jwt = false
 
 [functions.generate-sequence-steps]
 verify_jwt = false
+
+[functions.process-sequences]
+verify_jwt = false
+
+[functions.whatsapp-webhook]
+verify_jwt = false

@@ -275,6 +275,65 @@ ${signature ? `- Signature: ${signature}` : ""}
               console.error(`Send failed for ${lead.business_name}:`, sendErr);
             }
           }
+
+          // Auto-send WhatsApp messages via Meta Cloud API
+          if (channel === "whatsapp" && contactValue) {
+            const WHATSAPP_TOKEN = Deno.env.get("WHATSAPP_BUSINESS_API_TOKEN");
+            const PHONE_NUMBER_ID = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
+
+            if (WHATSAPP_TOKEN && PHONE_NUMBER_ID) {
+              // Clean phone number: remove +, spaces, dashes
+              const cleanPhone = contactValue.replace(/[\s+\-()]/g, "");
+
+              try {
+                const waResponse = await fetch(
+                  `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      messaging_product: "whatsapp",
+                      to: cleanPhone,
+                      type: "text",
+                      text: { body: message.body },
+                    }),
+                  }
+                );
+
+                if (waResponse.ok) {
+                  await supabase.from("email_campaigns").update({
+                    status: "sent",
+                    sent_at: new Date().toISOString(),
+                  }).eq("id", campaign.id);
+
+                  await supabase.from("leads").update({ status: "contacted" }).eq("id", lead.id);
+
+                  await supabase.from("activity_logs").insert({
+                    user_id: userSettings.user_id,
+                    action: "auto_whatsapp_sent",
+                    details: { business_name: lead.business_name, to: cleanPhone },
+                  });
+                  totalSent++;
+                } else {
+                  const errBody = await waResponse.text();
+                  totalErrors++;
+                  errors.push(`WhatsApp failed for ${lead.business_name}: ${errBody}`);
+                  await supabase.from("activity_logs").insert({
+                    user_id: userSettings.user_id,
+                    action: "auto_whatsapp_failed",
+                    details: { business_name: lead.business_name, to: cleanPhone, error: errBody },
+                  });
+                }
+              } catch (waErr) {
+                totalErrors++;
+                errors.push(`WhatsApp error for ${lead.business_name}: ${waErr}`);
+                console.error(`WhatsApp send failed for ${lead.business_name}:`, waErr);
+              }
+            }
+          }
         } catch (err) {
           totalErrors++;
           errors.push(`Outreach error for ${lead.business_name}: ${err}`);
