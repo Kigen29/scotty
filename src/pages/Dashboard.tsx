@@ -85,6 +85,7 @@ const Dashboard = () => {
     { label: "EMAILS SENT", value: stats.emailsSent, icon: Send, accent: "text-blue-500", sub: `${stats.drafts} drafts` },
     { label: "RESPONSE RATE", value: `${stats.responseRate}%`, icon: MessageSquare, accent: "text-amber-500" },
     { label: "INTERESTED", value: stats.interested, icon: TrendingUp, accent: "text-emerald-500" },
+    { label: "MEETINGS", value: stats.meetingsBooked, icon: CalendarDays, accent: "text-violet-500" },
   ];
 
   // Pipeline data
