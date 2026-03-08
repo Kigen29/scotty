@@ -73,6 +73,7 @@ const SettingsPage = () => {
         social_discovery_enabled: (data as any).social_discovery_enabled ?? true,
         whatsapp_number: (data as any).whatsapp_number || "",
         discovery_pipeline: (data as any).discovery_pipeline || "firecrawl",
+        booking_link: (data as any).booking_link || "",
       });
       setPortfolioProjects((data as any).portfolio_projects || []);
     }
