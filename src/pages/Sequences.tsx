@@ -514,6 +514,59 @@ const Sequences = () => {
     }
   };
 
+  // Manage enrollments
+  const openManageDialog = async (seqId: string) => {
+    if (!user) return;
+    setManageSeqId(seqId);
+    setEnrollmentsLoading(true);
+    const { data } = await supabase
+      .from("sequence_enrollments")
+      .select("id, lead_id, status, current_step, leads(business_name, email)")
+      .eq("sequence_id", seqId)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    setEnrollments(
+      (data || []).map((e: any) => ({
+        id: e.id,
+        lead_id: e.lead_id,
+        status: e.status,
+        current_step: e.current_step,
+        business_name: e.leads?.business_name || "Unknown",
+        email: e.leads?.email || null,
+      }))
+    );
+    setEnrollmentsLoading(false);
+  };
+
+  const updateEnrollmentStatus = async (enrollmentId: string, newStatus: string) => {
+    const { error } = await supabase
+      .from("sequence_enrollments")
+      .update({ status: newStatus })
+      .eq("id", enrollmentId);
+
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: newStatus === "paused" ? "Enrollment paused" : "Enrollment resumed" });
+      if (manageSeqId) openManageDialog(manageSeqId);
+    }
+  };
+
+  const removeEnrollment = async (enrollmentId: string) => {
+    const { error } = await supabase
+      .from("sequence_enrollments")
+      .delete()
+      .eq("id", enrollmentId);
+
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Lead removed from sequence" });
+      if (manageSeqId) openManageDialog(manageSeqId);
+    }
+  };
+
   // Builder view
   if (editing) {
     return (
