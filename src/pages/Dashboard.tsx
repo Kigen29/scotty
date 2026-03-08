@@ -7,8 +7,17 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useTeam } from "@/hooks/useTeam";
 import { Users, Mail, MessageSquare, TrendingUp, Flame, Star, Zap, Send, Gauge, CalendarDays, UserCircle } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import ExportableChart from "@/components/ExportableChart";
+
+const PIPELINE_COLORS = [
+  "hsl(var(--muted-foreground))",
+  "hsl(220 80% 55%)",
+  "hsl(38 92% 50%)",
+  "hsl(var(--primary))",
+  "hsl(142 71% 45%)",
+];
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -80,7 +89,6 @@ const Dashboard = () => {
     if (user) fetchAll();
   }, [user, fetchAll]);
 
-  // Fetch team-wide activity
   useEffect(() => {
     if (!teamId || members.length === 0) {
       setTeamActivities([]);
@@ -111,15 +119,14 @@ const Dashboard = () => {
     { label: "MEETINGS", value: stats.meetingsBooked, icon: CalendarDays, accent: "text-violet-500" },
   ];
 
-  // Pipeline data
-  const pipeline = [
-    { label: "Discovered", count: stats.totalLeads, color: "bg-muted-foreground" },
-    { label: "Qualified", count: stats.qualified, color: "bg-blue-500" },
-    { label: "Contacted", count: stats.contacted, color: "bg-amber-500" },
-    { label: "Responded", count: stats.responded, color: "bg-primary" },
-    { label: "Interested", count: stats.interested, color: "bg-emerald-500" },
+  // Pipeline data for vertical bar chart
+  const pipelineData = [
+    { label: "Discovered", count: stats.totalLeads },
+    { label: "Qualified", count: stats.qualified },
+    { label: "Contacted", count: stats.contacted },
+    { label: "Responded", count: stats.responded },
+    { label: "Interested", count: stats.interested },
   ];
-  const maxPipeline = Math.max(...pipeline.map((p) => p.count), 1);
 
   const memberNameMap: Record<string, string> = {};
   members.forEach((m) => { memberNameMap[m.user_id] = m.display_name; });
@@ -143,8 +150,15 @@ const Dashboard = () => {
 
   const displayName = user?.email?.split("@")[0] || "";
 
+  const tooltipStyle = {
+    backgroundColor: "hsl(var(--card))",
+    border: "1px solid hsl(var(--border))",
+    borderRadius: "8px",
+    fontSize: 12,
+  };
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-8">
       <div>
         <h1 className="text-2xl font-bold">{getGreeting()}, {displayName} 👋</h1>
         <p className="text-sm text-muted-foreground">Your lead generation pipeline at a glance</p>
@@ -192,55 +206,47 @@ const Dashboard = () => {
         </CardContent>
       </Card>
 
-      {/* Pipeline funnel */}
-      <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Pipeline</CardTitle></CardHeader>
-        <CardContent>
-          <div className="space-y-2.5">
-            {pipeline.map((stage) => (
-              <div key={stage.label} className="flex items-center gap-3">
-                <span className="text-xs w-20 text-muted-foreground text-right">{stage.label}</span>
-                <div className="flex-1 h-7 bg-muted rounded-md overflow-hidden">
-                  <div
-                    className={`h-full ${stage.color} rounded-md flex items-center px-2.5 transition-all duration-500`}
-                    style={{ width: `${Math.max((stage.count / maxPipeline) * 100, 3)}%` }}
-                  >
-                    <span className="text-[11px] font-semibold text-white">{stage.count}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Pipeline — vertical bar chart */}
+      <ExportableChart title="Pipeline" fileName="pipeline">
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={pipelineData} barCategoryGap="20%">
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+            <XAxis dataKey="label" tick={{ fontSize: 12 }} className="fill-muted-foreground" />
+            <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" />
+            <RechartsTooltip contentStyle={tooltipStyle} />
+            <Bar dataKey="count" name="Leads" radius={[6, 6, 0, 0]}>
+              {pipelineData.map((_, i) => (
+                <Cell key={i} fill={PIPELINE_COLORS[i]} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </ExportableChart>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Area Chart */}
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">7-Day Activity</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="gradDiscovered" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="gradEmails" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(220 80% 55%)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(220 80% 55%)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="day" className="text-xs fill-muted-foreground" tick={{ fontSize: 11 }} />
-                <YAxis className="text-xs fill-muted-foreground" tick={{ fontSize: 11 }} />
-                <RechartsTooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: 12 }} />
-                <Area type="monotone" dataKey="discovered" name="Discovered" stroke="hsl(var(--primary))" fill="url(#gradDiscovered)" strokeWidth={2} />
-                <Area type="monotone" dataKey="emails" name="Emails" stroke="hsl(220 80% 55%)" fill="url(#gradEmails)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <ExportableChart title="7-Day Activity" fileName="7day_activity">
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="gradDiscovered" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="gradEmails" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(220 80% 55%)" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="hsl(220 80% 55%)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+              <XAxis dataKey="day" className="text-xs fill-muted-foreground" tick={{ fontSize: 11 }} />
+              <YAxis className="text-xs fill-muted-foreground" tick={{ fontSize: 11 }} />
+              <RechartsTooltip contentStyle={tooltipStyle} />
+              <Area type="monotone" dataKey="discovered" name="Discovered" stroke="hsl(var(--primary))" fill="url(#gradDiscovered)" strokeWidth={2} />
+              <Area type="monotone" dataKey="emails" name="Emails" stroke="hsl(220 80% 55%)" fill="url(#gradEmails)" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ExportableChart>
 
         {/* Hot Leads Table */}
         <Card>
@@ -249,7 +255,7 @@ const Dashboard = () => {
               <Flame className="h-4 w-4 text-orange-500" /> Hot Leads
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-6">
             {hotLeads.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">No hot leads yet</p>
             ) : (
@@ -292,7 +298,7 @@ const Dashboard = () => {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Activity</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           <Tabs defaultValue="mine">
             <TabsList className="mb-3">
               <TabsTrigger value="mine">My Activity</TabsTrigger>
