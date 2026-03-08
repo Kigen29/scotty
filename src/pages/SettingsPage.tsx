@@ -158,6 +158,9 @@ const SettingsPage = () => {
         </CardContent>
       </Card>
 
+      {/* ICP Profile */}
+      {user && <ICPProfileCard userId={user.id} />}
+
       {/* Profile */}
       <Card>
         <CardHeader className="pb-3">

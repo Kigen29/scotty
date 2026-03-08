@@ -13,6 +13,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/discovery", icon: Search, label: "Discovery" },
   { to: "/campaigns", icon: Mail, label: "Campaigns" },
+  { to: "/sequences", icon: GitBranch, label: "Sequences" },
   { to: "/conversations", icon: MessageSquare, label: "Conversations" },
   { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/settings", icon: Settings, label: "Settings" },
