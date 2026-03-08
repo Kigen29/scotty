@@ -11,7 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Trash2, GripVertical, Mail, Clock, ArrowDown, Zap,
-  ChevronDown, ChevronUp, Sparkles, Loader2, Wand2,
+  ChevronDown, ChevronUp, Sparkles, Loader2, Wand2, RotateCcw, Send, UserPlus,
 } from "lucide-react";
 import {
   Select,
@@ -41,6 +41,38 @@ const defaultStep: SequenceStep = {
   delay_days: 3,
   channel: "email",
 };
+
+const PRESET_TEMPLATES = [
+  {
+    name: "Cold Outreach",
+    icon: Send,
+    description: "Initial contact with new prospects",
+    steps: [
+      { subject: "Quick question about {{business_name}}", body_prompt: "Introduce yourself briefly, mention you noticed {{business_name}} in {{location}} and that they could benefit from your services. Keep it short and end with a simple question.", delay_days: 0, channel: "email" as const },
+      { subject: "Following up — {{business_name}}", body_prompt: "Reference the first email, add a specific value proposition relevant to {{category}} businesses. Mention a quick win or case study.", delay_days: 3, channel: "email" as const },
+      { subject: "Last note for {{business_name}}", body_prompt: "Final follow-up. Be direct about the value you can provide. Include a clear call to action with a specific time to chat. Create mild urgency without being pushy.", delay_days: 4, channel: "email" as const },
+    ],
+  },
+  {
+    name: "Follow-up Nurture",
+    icon: RotateCcw,
+    description: "Re-engage leads who went quiet",
+    steps: [
+      { subject: "Checking in — {{business_name}}", body_prompt: "Warm re-engagement email. Reference previous contact, share something new or valuable (tip, resource, industry insight) relevant to {{category}}.", delay_days: 0, channel: "email" as const },
+      { subject: "Thought you'd find this useful", body_prompt: "Share a relevant case study or success story from a similar {{category}} business. Make it about them, not you.", delay_days: 5, channel: "email" as const },
+    ],
+  },
+  {
+    name: "Re-engagement",
+    icon: UserPlus,
+    description: "Win back cold or lost leads",
+    steps: [
+      { subject: "It's been a while, {{business_name}}", body_prompt: "Acknowledge the gap since last contact. Share what's changed or improved in your offering that's relevant to {{category}} businesses in {{location}}.", delay_days: 0, channel: "email" as const },
+      { subject: "New opportunity for {{business_name}}", body_prompt: "Present a fresh angle or limited-time offer. Reference their specific situation and why now is a good time to reconnect.", delay_days: 4, channel: "email" as const },
+      { subject: "Moving on — unless you're interested?", body_prompt: "Breakup email. Let them know you won't follow up again unless they're interested. Simple yes/no CTA. Often gets the highest response rate.", delay_days: 5, channel: "email" as const },
+    ],
+  },
+];
 
 const Sequences = () => {
   const { user } = useAuth();
@@ -244,8 +276,7 @@ const Sequences = () => {
         </div>
 
         {/* AI Generate Section */}
-        {!editing.id && (
-          <div>
+        <div>
             {!showAiForm ? (
               <Button
                 variant="outline"
@@ -309,7 +340,6 @@ const Sequences = () => {
               </Card>
             )}
           </div>
-        )}
 
         <div className="flex items-center gap-4">
           <div className="flex-1 space-y-1.5">
@@ -450,6 +480,32 @@ const Sequences = () => {
         >
           <Plus className="h-4 w-4 mr-1" /> New Sequence
         </Button>
+      </div>
+
+      {/* Preset Templates */}
+      <div>
+        <h2 className="text-sm font-medium mb-2">Start from a template</h2>
+        <div className="grid grid-cols-3 gap-3">
+          {PRESET_TEMPLATES.map((tpl) => {
+            const Icon = tpl.icon;
+            return (
+              <Card
+                key={tpl.name}
+                className="cursor-pointer hover:border-primary/40 transition-colors"
+                onClick={() => setEditing({ name: tpl.name, steps: tpl.steps, is_active: true })}
+              >
+                <CardContent className="p-3 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">{tpl.name}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">{tpl.description}</p>
+                  <p className="text-[10px] text-muted-foreground/70">{tpl.steps.length} steps</p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </div>
 
       {sequences.length === 0 ? (
