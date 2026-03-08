@@ -1,7 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Badge } from "@/components/ui/badge";
-import { Star, Mail, Phone, MapPin } from "lucide-react";
+import { Star, Mail, Phone, MapPin, UserCircle } from "lucide-react";
 
 interface KanbanCardProps {
   lead: any;
