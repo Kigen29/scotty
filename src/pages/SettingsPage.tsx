@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search, Key, CalendarDays, Users, User, Mail, Zap, Target } from "lucide-react";
+import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search, Key, CalendarDays, Users, User, Mail, Zap, Target, AlertTriangle } from "lucide-react";
 import { ICPProfileCard } from "@/components/settings/ICPProfileCard";
 import TeamSettings from "@/components/settings/TeamSettings";
 
