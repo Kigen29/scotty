@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { Users, Mail, MessageSquare, TrendingUp, Flame, Star, Zap, Send, Gauge } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,61 +18,65 @@ const Dashboard = () => {
   const [chartData, setChartData] = useState<any[]>([]);
   const [quota, setQuota] = useState({ sent: 0, limit: 50 });
 
-  useEffect(() => {
+  const fetchAll = useCallback(async () => {
     if (!user) return;
-    const fetchAll = async () => {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
-      const [{ data: leads }, { data: emails }, { data: logs }, { data: settingsData }, { count: sentToday }] = await Promise.all([
-        supabase.from("leads").select("*").eq("user_id", user.id),
-        supabase.from("email_campaigns").select("*").eq("user_id", user.id),
-        supabase.from("activity_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(15),
-        supabase.from("settings").select("daily_send_limit").eq("user_id", user.id).maybeSingle(),
-        supabase.from("email_campaigns").select("id", { count: "exact", head: true }).eq("user_id", user.id).gte("sent_at", todayStart.toISOString()),
-      ]);
+    const [{ data: leads }, { data: emails }, { data: logs }, { data: settingsData }, { count: sentToday }] = await Promise.all([
+      supabase.from("leads").select("*").eq("user_id", user.id),
+      supabase.from("email_campaigns").select("*").eq("user_id", user.id),
+      supabase.from("activity_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(15),
+      supabase.from("settings").select("daily_send_limit").eq("user_id", user.id).maybeSingle(),
+      supabase.from("email_campaigns").select("id", { count: "exact", head: true }).eq("user_id", user.id).gte("sent_at", todayStart.toISOString()),
+    ]);
 
-      if (leads) {
-        const contacted = leads.filter((l) => l.status === "contacted").length;
-        const responded = leads.filter((l) => l.status === "responded").length;
-        const interested = leads.filter((l) => l.status === "interested").length;
-        setStats({
-          totalLeads: leads.length,
-          qualified: leads.filter((l) => l.status === "qualified").length,
-          contacted, responded, interested,
-          notInterested: leads.filter((l) => l.status === "not_interested").length,
-          emailsSent: emails?.filter((e) => e.status === "sent").length || 0,
-          drafts: emails?.filter((e) => e.status === "draft").length || 0,
-          responseRate: contacted > 0 ? Math.round((responded / contacted) * 100) : 0,
-        });
-        setHotLeads(
-          leads.filter((l: any) => l.status === "interested" || (l.priority_score && l.priority_score >= 8))
-            .sort((a: any, b: any) => (b.priority_score || 0) - (a.priority_score || 0))
-            .slice(0, 5)
-        );
-
-        // Build 7-day chart
-        const now = new Date();
-        const days = Array.from({ length: 7 }).map((_, i) => {
-          const d = new Date(now.getTime() - (6 - i) * 86400000);
-          const dayStr = d.toISOString().split("T")[0];
-          return {
-            day: d.toLocaleDateString("en", { weekday: "short" }),
-            discovered: leads.filter((l) => l.created_at?.startsWith(dayStr)).length,
-            contacted: leads.filter((l) => l.status === "contacted" && l.updated_at?.startsWith(dayStr)).length,
-            emails: emails?.filter((e) => e.sent_at?.startsWith(dayStr)).length || 0,
-          };
-        });
-        setChartData(days);
-      }
-      if (logs) setActivities(logs);
-      setQuota({
-        sent: sentToday || 0,
-        limit: settingsData?.daily_send_limit || 50,
+    if (leads) {
+      const contacted = leads.filter((l) => l.status === "contacted").length;
+      const responded = leads.filter((l) => l.status === "responded").length;
+      const interested = leads.filter((l) => l.status === "interested").length;
+      setStats({
+        totalLeads: leads.length,
+        qualified: leads.filter((l) => l.status === "qualified").length,
+        contacted, responded, interested,
+        notInterested: leads.filter((l) => l.status === "not_interested").length,
+        emailsSent: emails?.filter((e) => e.status === "sent").length || 0,
+        drafts: emails?.filter((e) => e.status === "draft").length || 0,
+        responseRate: contacted > 0 ? Math.round((responded / contacted) * 100) : 0,
       });
-    };
-    fetchAll();
+      setHotLeads(
+        leads.filter((l: any) => l.status === "interested" || (l.priority_score && l.priority_score >= 8))
+          .sort((a: any, b: any) => (b.priority_score || 0) - (a.priority_score || 0))
+          .slice(0, 5)
+      );
+
+      const now = new Date();
+      const days = Array.from({ length: 7 }).map((_, i) => {
+        const d = new Date(now.getTime() - (6 - i) * 86400000);
+        const dayStr = d.toISOString().split("T")[0];
+        return {
+          day: d.toLocaleDateString("en", { weekday: "short" }),
+          discovered: leads.filter((l) => l.created_at?.startsWith(dayStr)).length,
+          contacted: leads.filter((l) => l.status === "contacted" && l.updated_at?.startsWith(dayStr)).length,
+          emails: emails?.filter((e) => e.sent_at?.startsWith(dayStr)).length || 0,
+        };
+      });
+      setChartData(days);
+    }
+    if (logs) setActivities(logs);
+    setQuota({
+      sent: sentToday || 0,
+      limit: settingsData?.daily_send_limit || 50,
+    });
   }, [user]);
+
+  useEffect(() => {
+    if (user) fetchAll();
+  }, [user, fetchAll]);
+
+  useRealtimeSubscription("leads", user?.id, fetchAll);
+  useRealtimeSubscription("email_campaigns", user?.id, fetchAll);
+  useRealtimeSubscription("activity_logs", user?.id, fetchAll);
 
   const metricCards = [
     { label: "TOTAL LEADS", value: stats.totalLeads, icon: Users, accent: "text-primary" },

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import {
   Search, Globe, Phone, Mail, MapPin, CheckCircle2, X, Loader2, Star, Brain,
   ExternalLink, ChevronUp, ChevronDown, Users, Filter, ArrowUpDown, Trash2, Cpu, Zap, Flame,
@@ -72,24 +73,7 @@ const LeadDiscovery = () => {
   const [page, setPage] = useState(0);
   const perPage = 25;
 
-  useEffect(() => {
-    if (user) {
-      fetchLeads();
-      fetchPipeline();
-    }
-  }, [user]);
-
-  const fetchPipeline = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from("settings")
-      .select("discovery_pipeline")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (data?.discovery_pipeline) setCurrentPipeline(data.discovery_pipeline);
-  };
-
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase
       .from("leads")
@@ -97,7 +81,26 @@ const LeadDiscovery = () => {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     if (data) setLeads(data);
-  };
+  }, [user]);
+
+  const fetchPipeline = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("settings")
+      .select("discovery_pipeline")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (data?.discovery_pipeline) setCurrentPipeline(data.discovery_pipeline);
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchLeads();
+      fetchPipeline();
+    }
+  }, [user, fetchLeads, fetchPipeline]);
+
+  useRealtimeSubscription("leads", user?.id, fetchLeads);
 
   const handleDiscover = async () => {
     if (!discCategory && !discLocation) {

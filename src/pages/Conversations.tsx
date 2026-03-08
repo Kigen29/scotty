@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { MessageSquare, ArrowUpRight, ArrowDownLeft, Sparkles, Send, Loader2 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { DateFilter, type DateRange } from "@/components/DateFilter";
@@ -19,11 +20,7 @@ const Conversations = () => {
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
 
-  useEffect(() => {
-    if (user) fetchConversations();
-  }, [user]);
-
-  const fetchConversations = async () => {
+  const fetchConversations = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase
       .from("conversations")
@@ -31,7 +28,13 @@ const Conversations = () => {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     if (data) setConversations(data as any);
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) fetchConversations();
+  }, [user, fetchConversations]);
+
+  useRealtimeSubscription("conversations", user?.id, fetchConversations);
 
   const sendReply = async () => {
     if (!user || !selectedLeadId || !replyText.trim()) return;
