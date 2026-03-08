@@ -9,7 +9,7 @@ interface KanbanCardProps {
   assigneeName?: string;
 }
 
-const KanbanCard = ({ lead, onClick }: KanbanCardProps) => {
+const KanbanCard = ({ lead, onClick, assigneeName }: KanbanCardProps) => {
   const {
     attributes,
     listeners,
