@@ -51,10 +51,17 @@ const Pipeline = () => {
     if (!over) return;
 
     const leadId = active.id as string;
-    const newStatus = over.id as string;
+    let newStatus = over.id as string;
 
-    // Check if dropped on a column (stage id)
-    if (!STAGES.find((s) => s.id === newStatus)) return;
+    // If dropped on a card instead of a column, resolve the card's column
+    if (!STAGES.find((s) => s.id === newStatus)) {
+      const overLead = leads.find((l) => l.id === newStatus);
+      if (overLead) {
+        newStatus = overLead.status;
+      } else {
+        return;
+      }
+    }
 
     const lead = leads.find((l) => l.id === leadId);
     if (!lead || lead.status === newStatus) return;
