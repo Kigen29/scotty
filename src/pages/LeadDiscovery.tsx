@@ -62,6 +62,7 @@ const LeadDiscovery = () => {
   const [filterLocation, setFilterLocation] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterHasEmail, setFilterHasEmail] = useState(false);
+  const [filterDateRange, setFilterDateRange] = useState<DateRange | null>(null);
 
   // Sort
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
