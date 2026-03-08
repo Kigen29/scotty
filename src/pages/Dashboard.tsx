@@ -15,6 +15,7 @@ const Dashboard = () => {
   const [activities, setActivities] = useState<any[]>([]);
   const [hotLeads, setHotLeads] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
+  const [quota, setQuota] = useState({ sent: 0, limit: 50 });
 
   useEffect(() => {
     if (!user) return;
