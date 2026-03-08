@@ -14,6 +14,7 @@ import Reports from "@/pages/Reports";
 import Deliverability from "@/pages/Deliverability";
 import SettingsPage from "@/pages/SettingsPage";
 import Sequences from "@/pages/Sequences";
+import Pipeline from "@/pages/Pipeline";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/reports" element={<Reports />} />
             <Route path="/deliverability" element={<Deliverability />} />
             <Route path="/sequences" element={<Sequences />} />
+            <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
