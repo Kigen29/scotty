@@ -436,7 +436,18 @@ const LeadDiscovery = () => {
                   <TableCell className="text-sm">{lead.phone || <span className="text-muted-foreground">—</span>}</TableCell>
                   <TableCell className="text-sm">
                     {lead.email ? (
-                      <span className="text-foreground">{lead.email}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-foreground truncate max-w-[160px]">{lead.email}</span>
+                        {lead.email_verified === true && (
+                          <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" title={`Verified: ${lead.email_verification_status}`} />
+                        )}
+                        {lead.email_verified === false && (
+                          <ShieldX className="h-3.5 w-3.5 text-destructive shrink-0" title={`Failed: ${lead.email_verification_status}`} />
+                        )}
+                        {lead.email_verified === null && (
+                          <ShieldAlert className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" title="Not verified" />
+                        )}
+                      </div>
                     ) : (
                       <Badge variant="outline" className="text-xs text-muted-foreground">No email</Badge>
                     )}
