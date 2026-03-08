@@ -5,16 +5,17 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useNotifications } from "@/hooks/useNotifications";
 
 const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/", icon: LayoutDashboard, label: "Dashboard", badgeKey: "activity" as const },
   { to: "/discovery", icon: Search, label: "Discovery" },
   { to: "/campaigns", icon: Mail, label: "Campaigns" },
   { to: "/sequences", icon: GitBranch, label: "Sequences" },
-  { to: "/pipeline", icon: Columns3, label: "Pipeline" },
+  { to: "/pipeline", icon: Columns3, label: "Pipeline", badgeKey: "assignments" as const },
   { to: "/conversations", icon: MessageSquare, label: "Conversations" },
   { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/deliverability", icon: ShieldCheck, label: "Deliverability" },
