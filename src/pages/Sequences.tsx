@@ -244,8 +244,7 @@ const Sequences = () => {
         </div>
 
         {/* AI Generate Section */}
-        {!editing.id && (
-          <div>
+        <div>
             {!showAiForm ? (
               <Button
                 variant="outline"
