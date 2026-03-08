@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, Search, Mail, MessageSquare, BarChart3, Settings, Zap, LogOut, Menu, X,
+  LayoutDashboard, Search, Mail, MessageSquare, BarChart3, Settings, Zap, LogOut, Menu, X, GitBranch,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -13,6 +13,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/discovery", icon: Search, label: "Discovery" },
   { to: "/campaigns", icon: Mail, label: "Campaigns" },
+  { to: "/sequences", icon: GitBranch, label: "Sequences" },
   { to: "/conversations", icon: MessageSquare, label: "Conversations" },
   { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/settings", icon: Settings, label: "Settings" },

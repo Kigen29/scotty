@@ -12,6 +12,7 @@ import Campaigns from "@/pages/Campaigns";
 import Conversations from "@/pages/Conversations";
 import Reports from "@/pages/Reports";
 import SettingsPage from "@/pages/SettingsPage";
+import Sequences from "@/pages/Sequences";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,6 +44,7 @@ const App = () => (
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/conversations" element={<Conversations />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/sequences" element={<Sequences />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />

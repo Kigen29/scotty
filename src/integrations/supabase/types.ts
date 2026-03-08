@@ -132,6 +132,60 @@ export type Database = {
           },
         ]
       }
+      icp_profiles: {
+        Row: {
+          created_at: string
+          has_website_preference: string | null
+          id: string
+          industries: string[]
+          is_active: boolean
+          locations: string[]
+          name: string
+          pain_points: string[]
+          size_range: string | null
+          updated_at: string
+          user_id: string
+          weight_has_email: number
+          weight_industry: number
+          weight_location: number
+          weight_no_website: number
+        }
+        Insert: {
+          created_at?: string
+          has_website_preference?: string | null
+          id?: string
+          industries?: string[]
+          is_active?: boolean
+          locations?: string[]
+          name?: string
+          pain_points?: string[]
+          size_range?: string | null
+          updated_at?: string
+          user_id: string
+          weight_has_email?: number
+          weight_industry?: number
+          weight_location?: number
+          weight_no_website?: number
+        }
+        Update: {
+          created_at?: string
+          has_website_preference?: string | null
+          id?: string
+          industries?: string[]
+          is_active?: boolean
+          locations?: string[]
+          name?: string
+          pain_points?: string[]
+          size_range?: string | null
+          updated_at?: string
+          user_id?: string
+          weight_has_email?: number
+          weight_industry?: number
+          weight_location?: number
+          weight_no_website?: number
+        }
+        Relationships: []
+      }
       leads: {
         Row: {
           analysis: Json | null
@@ -143,6 +197,7 @@ export type Database = {
           discovery_source: string | null
           email: string | null
           has_website: boolean | null
+          icp_score: number | null
           id: string
           location: string | null
           notes: string | null
@@ -165,6 +220,7 @@ export type Database = {
           discovery_source?: string | null
           email?: string | null
           has_website?: boolean | null
+          icp_score?: number | null
           id?: string
           location?: string | null
           notes?: string | null
@@ -187,6 +243,7 @@ export type Database = {
           discovery_source?: string | null
           email?: string | null
           has_website?: boolean | null
+          icp_score?: number | null
           id?: string
           location?: string | null
           notes?: string | null
@@ -198,6 +255,90 @@ export type Database = {
           updated_at?: string
           user_id?: string
           website_url?: string | null
+        }
+        Relationships: []
+      }
+      sequence_enrollments: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          current_step: number
+          id: string
+          lead_id: string
+          next_step_at: string | null
+          sequence_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          current_step?: number
+          id?: string
+          lead_id: string
+          next_step_at?: string | null
+          sequence_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          current_step?: number
+          id?: string
+          lead_id?: string
+          next_step_at?: string | null
+          sequence_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sequence_enrollments_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sequence_enrollments_sequence_id_fkey"
+            columns: ["sequence_id"]
+            isOneToOne: false
+            referencedRelation: "sequences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sequences: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          steps: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          steps?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          steps?: Json
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

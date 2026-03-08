@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search, Key } from "lucide-react";
+import { ICPProfileCard } from "@/components/settings/ICPProfileCard";
 
 interface PortfolioProject {
   url: string;
@@ -156,6 +157,9 @@ const SettingsPage = () => {
           </RadioGroup>
         </CardContent>
       </Card>
+
+      {/* ICP Profile */}
+      {user && <ICPProfileCard userId={user.id} />}
 
       {/* Profile */}
       <Card>
