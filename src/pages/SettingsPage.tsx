@@ -40,6 +40,7 @@ const SettingsPage = () => {
     social_discovery_enabled: true,
     whatsapp_number: "",
     discovery_pipeline: "firecrawl",
+    booking_link: "",
   });
   const [portfolioProjects, setPortfolioProjects] = useState<PortfolioProject[]>([]);
   const [newService, setNewService] = useState("");
