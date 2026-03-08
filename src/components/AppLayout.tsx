@@ -9,6 +9,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNotifications } from "@/hooks/useNotifications";
+import NotificationCenter from "@/components/NotificationCenter";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", badgeKey: "activity" as const },
