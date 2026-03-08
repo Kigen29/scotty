@@ -385,6 +385,23 @@ const LeadDiscovery = () => {
                       <span className="text-sm">{lead.priority_score || 5}</span>
                     </div>
                   </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 gap-0.5 ${
+                      lead.discovery_source === "ai_search" ? "border-violet-500/40 text-violet-600 dark:text-violet-400" :
+                      lead.discovery_source === "google_maps" ? "border-orange-500/40 text-orange-600 dark:text-orange-400" :
+                      lead.discovery_source === "social" ? "border-blue-500/40 text-blue-600 dark:text-blue-400" :
+                      "border-muted-foreground/30 text-muted-foreground"
+                    }`}>
+                      {lead.discovery_source === "ai_search" ? <Cpu className="h-2.5 w-2.5" /> :
+                       lead.discovery_source === "google_maps" ? <Flame className="h-2.5 w-2.5" /> :
+                       lead.discovery_source === "social" ? <Globe className="h-2.5 w-2.5" /> :
+                       <Search className="h-2.5 w-2.5" />}
+                      {lead.discovery_source === "ai_search" ? "AI" :
+                       lead.discovery_source === "google_maps" ? "Maps" :
+                       lead.discovery_source === "social" ? "Social" :
+                       lead.discovery_source || "Web"}
+                    </Badge>
+                  </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1">
                       {lead.status === "discovered" && (
