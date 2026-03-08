@@ -16,6 +16,7 @@ const navItems = [
   { to: "/sequences", icon: GitBranch, label: "Sequences" },
   { to: "/conversations", icon: MessageSquare, label: "Conversations" },
   { to: "/reports", icon: BarChart3, label: "Reports" },
+  { to: "/deliverability", icon: ShieldCheck, label: "Deliverability" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
