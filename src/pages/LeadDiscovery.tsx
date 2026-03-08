@@ -428,7 +428,7 @@ const LeadDiscovery = () => {
               ))}
               {paged.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
                     {leads.length === 0 ? (
                       <div>
                         <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
