@@ -288,14 +288,24 @@ const LeadDiscovery = () => {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const getProfileUrl = (lead: any): string => {
+  const getProfileUrl = (lead: any): string | null => {
     const social = lead.social_links as any;
     return (
       social?.google_maps ||
       social?.instagram ||
       social?.tiktok ||
-      `https://www.google.com/search?q=${encodeURIComponent(`${lead.business_name} ${lead.location || ""} Kenya`)}`
+      null
     );
+  };
+
+  const handleViewProfile = (lead: any) => {
+    const url = getProfileUrl(lead);
+    if (url) {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else {
+      // Open the lead detail sheet instead
+      setDetailLead(lead);
+    }
   };
 
   return (
