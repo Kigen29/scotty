@@ -639,6 +639,69 @@ const LeadDiscovery = () => {
                   </div>
                 )}
 
+                {/* Enrichment Data */}
+                {(detailLead.analysis as any)?.enrichment && (() => {
+                  const e = (detailLead.analysis as any).enrichment;
+                  return (
+                    <div className="space-y-3 p-3 rounded-lg bg-accent/5 border border-accent/20">
+                      <div className="flex items-center gap-2 font-medium text-sm">
+                        <Sparkles className="h-4 w-4 text-accent" /> Enrichment Data
+                        <Badge variant="outline" className="text-[10px] ml-auto">{e.confidence} confidence</Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-muted-foreground">Size</span>
+                          <p className="font-medium capitalize">{e.estimated_size}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Revenue</span>
+                          <p className="font-medium">{e.estimated_revenue}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Digital Maturity</span>
+                          <p className="font-medium capitalize">{e.digital_maturity}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Decision Maker</span>
+                          <p className="font-medium">{e.decision_maker?.likely_title}</p>
+                        </div>
+                      </div>
+                      {e.decision_maker?.approach_tip && (
+                        <div className="text-xs p-2 rounded bg-muted">
+                          <Lightbulb className="h-3 w-3 inline mr-1 text-amber-500" />
+                          {e.decision_maker.approach_tip}
+                        </div>
+                      )}
+                      {e.tech_stack?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold mb-1">Tech Stack</p>
+                          <div className="flex flex-wrap gap-1">
+                            {e.tech_stack.map((t: string, i: number) => (
+                              <Badge key={i} variant="secondary" className="text-[10px]">{t}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {e.competitors?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold mb-1">Competitors with Websites</p>
+                          <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
+                            {e.competitors.map((c: string, i: number) => <li key={i}>{c}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {e.pitch_angles?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold mb-1">Pitch Angles</p>
+                          <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
+                            {e.pitch_angles.map((a: string, i: number) => <li key={i}>{a}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Actions */}
                 <div className="flex flex-col gap-2 pt-2">
                   <Button variant="outline" onClick={() => openExternal(getProfileUrl(detailLead))}>
