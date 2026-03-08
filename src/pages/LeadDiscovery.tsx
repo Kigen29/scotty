@@ -15,7 +15,7 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import {
   Search, Globe, Phone, Mail, MapPin, CheckCircle2, X, Loader2, Star, Brain,
   ExternalLink, ChevronUp, ChevronDown, Users, Filter, ArrowUpDown, Trash2, Cpu, Zap, Flame,
-  ShieldCheck, ShieldAlert, ShieldX,
+  ShieldCheck, ShieldAlert, ShieldX, Sparkles, Building2, Lightbulb,
 } from "lucide-react";
 
 const categories = [
@@ -45,6 +45,7 @@ const LeadDiscovery = () => {
   const [loading, setLoading] = useState(false);
   const [generatingEmail, setGeneratingEmail] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [enriching, setEnriching] = useState<string | null>(null);
 
   // Discovery form
   const [discCategory, setDiscCategory] = useState("");
@@ -164,6 +165,27 @@ const LeadDiscovery = () => {
     if (!error) {
       fetchLeads();
       toast({ title: "Lead deleted" });
+    }
+  };
+
+  const enrichLeads = async (leadIds?: string[]) => {
+    const ids = leadIds || Array.from(selected);
+    if (ids.length === 0) {
+      toast({ title: "Select leads to enrich", variant: "destructive" });
+      return;
+    }
+    setEnriching(leadIds?.length === 1 ? leadIds[0] : "bulk");
+    try {
+      const { data, error } = await supabase.functions.invoke("enrich-lead", {
+        body: { lead_ids: ids.slice(0, 10) },
+      });
+      if (error) throw error;
+      toast({ title: "Enrichment complete", description: `${data.enriched} of ${data.total} leads enriched` });
+      fetchLeads();
+    } catch (error: any) {
+      toast({ title: "Enrichment failed", description: error.message, variant: "destructive" });
+    } finally {
+      setEnriching(null);
     }
   };
 
@@ -373,6 +395,9 @@ const LeadDiscovery = () => {
           <Button size="sm" variant="outline" onClick={() => verifyEmails()} disabled={verifying}>
             <ShieldCheck className="h-3.5 w-3.5 mr-1" /> {verifying ? "Verifying..." : "Verify Emails"}
           </Button>
+          <Button size="sm" variant="outline" onClick={() => enrichLeads()} disabled={enriching === "bulk"}>
+            <Sparkles className="h-3.5 w-3.5 mr-1" /> {enriching === "bulk" ? "Enriching..." : "Enrich"}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => bulkUpdateStatus("dismissed")}>
             <X className="h-3.5 w-3.5 mr-1" /> Dismiss
           </Button>
@@ -498,8 +523,13 @@ const LeadDiscovery = () => {
                         </Button>
                       )}
                       {!lead.analysis && (
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" title="Analyze" onClick={() => analyzeLead(lead.id)}>
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => analyzeLead(lead.id)}>
                           <Brain className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {!(lead.analysis as any)?.enrichment && (
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => enrichLeads([lead.id])} disabled={enriching === lead.id}>
+                          {enriching === lead.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                         </Button>
                       )}
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => openExternal(getProfileUrl(lead))}>
@@ -609,11 +639,81 @@ const LeadDiscovery = () => {
                   </div>
                 )}
 
+                {/* Enrichment Data */}
+                {(detailLead.analysis as any)?.enrichment && (() => {
+                  const e = (detailLead.analysis as any).enrichment;
+                  return (
+                    <div className="space-y-3 p-3 rounded-lg bg-accent/5 border border-accent/20">
+                      <div className="flex items-center gap-2 font-medium text-sm">
+                        <Sparkles className="h-4 w-4 text-accent" /> Enrichment Data
+                        <Badge variant="outline" className="text-[10px] ml-auto">{e.confidence} confidence</Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-muted-foreground">Size</span>
+                          <p className="font-medium capitalize">{e.estimated_size}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Revenue</span>
+                          <p className="font-medium">{e.estimated_revenue}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Digital Maturity</span>
+                          <p className="font-medium capitalize">{e.digital_maturity}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Decision Maker</span>
+                          <p className="font-medium">{e.decision_maker?.likely_title}</p>
+                        </div>
+                      </div>
+                      {e.decision_maker?.approach_tip && (
+                        <div className="text-xs p-2 rounded bg-muted">
+                          <Lightbulb className="h-3 w-3 inline mr-1 text-amber-500" />
+                          {e.decision_maker.approach_tip}
+                        </div>
+                      )}
+                      {e.tech_stack?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold mb-1">Tech Stack</p>
+                          <div className="flex flex-wrap gap-1">
+                            {e.tech_stack.map((t: string, i: number) => (
+                              <Badge key={i} variant="secondary" className="text-[10px]">{t}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {e.competitors?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold mb-1">Competitors with Websites</p>
+                          <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
+                            {e.competitors.map((c: string, i: number) => <li key={i}>{c}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {e.pitch_angles?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold mb-1">Pitch Angles</p>
+                          <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
+                            {e.pitch_angles.map((a: string, i: number) => <li key={i}>{a}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Actions */}
                 <div className="flex flex-col gap-2 pt-2">
-                  <Button variant="outline" onClick={() => openExternal(getProfileUrl(detailLead))}>
-                    <ExternalLink className="h-4 w-4 mr-2" /> View Profile
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={() => openExternal(getProfileUrl(detailLead))}>
+                      <ExternalLink className="h-4 w-4 mr-2" /> View Profile
+                    </Button>
+                    {!(detailLead.analysis as any)?.enrichment && (
+                      <Button variant="outline" onClick={() => enrichLeads([detailLead.id])} disabled={enriching === detailLead.id}>
+                        {enriching === detailLead.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      </Button>
+                    )}
+                  </div>
                   {detailLead.status === "discovered" && (
                     <div className="flex gap-2">
                       <Button className="flex-1" onClick={() => { updateLeadStatus(detailLead.id, "qualified"); setDetailLead(null); }}>
