@@ -9,6 +9,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNotifications } from "@/hooks/useNotifications";
+import NotificationCenter from "@/components/NotificationCenter";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", badgeKey: "activity" as const },
@@ -77,11 +78,14 @@ const AppLayout = () => {
               <p className="text-[10px] text-muted-foreground">Lead Autopilot</p>
             </div>
           </div>
-          {isMobile && (
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSidebarOpen(false)}>
-              <X className="h-4 w-4" />
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            <NotificationCenter />
+            {isMobile && (
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSidebarOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
         <nav className="flex-1 px-2 space-y-0.5 mt-2">
