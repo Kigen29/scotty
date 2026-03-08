@@ -86,6 +86,32 @@ Deno.serve(async (req) => {
             }
           }
         }
+
+        // Check for inbound replies and pause active sequences
+        const { data: replies } = await supabase
+          .from("conversations")
+          .select("id")
+          .eq("lead_id", lead.id)
+          .eq("direction", "inbound")
+          .limit(1);
+
+        if (replies && replies.length > 0) {
+          const { data: pausedEnrollments } = await supabase
+            .from("sequence_enrollments")
+            .update({ status: "paused" })
+            .eq("lead_id", lead.id)
+            .eq("status", "active")
+            .select("id");
+
+          if (pausedEnrollments && pausedEnrollments.length > 0) {
+            await supabase.from("activity_logs").insert({
+              user_id: lead.user_id,
+              action: "sequence_paused_by_reply",
+              details: { lead_id: lead.id, email: recipientEmail, paused_count: pausedEnrollments.length },
+            });
+          }
+        }
+
         await supabase.from("activity_logs").insert({
           user_id: lead.user_id,
           action: "email_opened",
