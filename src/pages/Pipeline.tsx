@@ -111,6 +111,11 @@ const Pipeline = () => {
   // Derive unique categories and locations for filter dropdowns
   const categories = useMemo(() => [...new Set(leads.map((l) => l.category).filter(Boolean))].sort(), [leads]);
   const locations = useMemo(() => [...new Set(leads.map((l) => l.location).filter(Boolean))].sort(), [leads]);
+  const memberMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    members.forEach((m) => { map[m.user_id] = m.display_name; });
+    return map;
+  }, [members]);
 
   const filteredLeads = useMemo(() => {
     return leads.filter((l) => {
