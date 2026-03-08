@@ -100,7 +100,7 @@ const LeadDiscovery = () => {
     }
   }, [user, fetchLeads, fetchPipeline]);
 
-  useRealtimeSubscription("leads", user?.id, fetchLeads);
+  useRealtimeSubscription("leads", user?.id, fetchLeads, true);
 
   const handleDiscover = async () => {
     if (!discCategory && !discLocation) {
