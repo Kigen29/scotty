@@ -454,8 +454,16 @@ const LeadDiscovery = () => {
                           {generatingEmail === lead.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
                         </Button>
                       )}
+                      {!lead.analysis && (
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" title="Analyze" onClick={() => analyzeLead(lead.id)}>
+                          <Brain className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => openExternal(getProfileUrl(lead))}>
                         <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={() => deleteLead(lead.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </TableCell>
