@@ -36,7 +36,7 @@ const KanbanColumn = ({ id, label, color, leads, onCardClick, memberMap }: Kanba
       >
         <SortableContext items={leads.map((l) => l.id)} strategy={verticalListSortingStrategy}>
           {leads.map((lead) => (
-            <KanbanCard key={lead.id} lead={lead} onClick={() => onCardClick?.(lead)} />
+            <KanbanCard key={lead.id} lead={lead} onClick={() => onCardClick?.(lead)} assigneeName={lead.assigned_to && memberMap?.[lead.assigned_to]} />
           ))}
         </SortableContext>
 
