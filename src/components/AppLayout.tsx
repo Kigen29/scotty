@@ -1,7 +1,8 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, Search, Mail, MessageSquare, BarChart3, Settings, Zap, Menu, X, GitBranch, ShieldCheck, Columns3,
+  LayoutDashboard, Search, Mail, MessageSquare, BarChart3, Settings, Zap, Menu, X, GitBranch, ShieldCheck, Columns3, Sun, Moon,
 } from "lucide-react";
+import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ const AppLayout = () => {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { unreadActivity, newAssignments, markActivitySeen, markAssignmentsSeen } = useNotifications();
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     if (location.pathname === "/") markActivitySeen();
@@ -129,6 +131,16 @@ const AppLayout = () => {
             <h2 className="text-base font-semibold">{pageTitle}</h2>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              title="Toggle theme"
+            >
+              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            </Button>
             <NotificationCenter />
             <ProfileDropdown />
           </div>
