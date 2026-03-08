@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search, Key, CalendarDays } from "lucide-react";
 import { ICPProfileCard } from "@/components/settings/ICPProfileCard";
+import TeamSettings from "@/components/settings/TeamSettings";
 
 interface PortfolioProject {
   url: string;
