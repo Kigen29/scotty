@@ -150,10 +150,10 @@ Return 5-8 realistic businesses with:
 
 Only include businesses you believe actually exist.`;
 
-        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        const aiResponse = await fetch(aiUrl, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            Authorization: `Bearer ${aiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
