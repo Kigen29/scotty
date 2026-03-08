@@ -65,6 +65,10 @@ const Dashboard = () => {
         setChartData(days);
       }
       if (logs) setActivities(logs);
+      setQuota({
+        sent: sentToday || 0,
+        limit: settingsData?.daily_send_limit || 50,
+      });
     };
     fetchAll();
   }, [user]);
