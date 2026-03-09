@@ -15,16 +15,19 @@ Deno.serve(async (req) => {
   const cronSecret = req.headers.get("x-cron-secret");
   const authHeader = req.headers.get("authorization");
   const CRON_SECRET = Deno.env.get("CRON_SECRET");
-  if (cronSecret !== CRON_SECRET) {
+  let callerUserId: string | null = null;
+  const isCron = cronSecret === CRON_SECRET;
+  if (!isCron) {
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-    const anonClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: authHeader } } });
+    const { createClient: createAnonClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+    const anonClient = createAnonClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: authHeader } } });
     const { data: claimsData, error: claimsError } = await anonClient.auth.getClaims(authHeader.replace("Bearer ", ""));
     if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    callerUserId = (claimsData.claims as any).sub;
   }
 
   try {
@@ -44,7 +47,15 @@ Deno.serve(async (req) => {
     try {
       const body = await req.json();
       if (body.user_id) {
+        // Non-cron callers can only trigger discovery for themselves
+        if (!isCron && body.user_id !== callerUserId) {
+          return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
         const { data } = await supabase.from("settings").select("*").eq("user_id", body.user_id).single();
+        if (data) usersToProcess = [data];
+      } else if (!isCron && callerUserId) {
+        // If no user_id provided by authenticated user, use their own
+        const { data } = await supabase.from("settings").select("*").eq("user_id", callerUserId).single();
         if (data) usersToProcess = [data];
       }
     } catch {
