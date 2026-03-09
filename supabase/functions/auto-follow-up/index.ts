@@ -7,12 +7,24 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function sanitizeForPrompt(text: string | null | undefined, maxLen = 200): string {
+  if (!text) return "";
+  return text
+    .replace(/ignore\s+(all\s+)?previous\s+instructions?/gi, "[filtered]")
+    .replace(/you\s+are\s+now/gi, "[filtered]")
+    .replace(/system\s*:\s*/gi, "[filtered]")
+    .replace(/\bprompt\s*:/gi, "[filtered]")
+    .replace(/\bassistant\s*:/gi, "[filtered]")
+    .substring(0, maxLen);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Auth: require cron secret or valid JWT
+  // Auth: require cron secret or valid JWT (JWT scoped to calling user only)
+  let scopedUserId: string | null = null;
   const cronSecret = req.headers.get("x-cron-secret");
   const authHeader = req.headers.get("authorization");
   const CRON_SECRET = Deno.env.get("CRON_SECRET");
@@ -25,6 +37,7 @@ Deno.serve(async (req) => {
     if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    scopedUserId = claimsData.claims.sub as string;
   }
 
   try {
@@ -39,11 +52,10 @@ Deno.serve(async (req) => {
 
     const resend = new Resend(RESEND_API_KEY);
 
-    // Get all autonomous users
-    const { data: allSettings } = await supabase
-      .from("settings")
-      .select("*")
-      .eq("is_autonomous", true);
+    // Get autonomous users (scoped to calling user if JWT auth)
+    let settingsQuery = supabase.from("settings").select("*").eq("is_autonomous", true);
+    if (scopedUserId) settingsQuery = settingsQuery.eq("user_id", scopedUserId);
+    const { data: allSettings } = await settingsQuery;
 
     if (!allSettings?.length) {
       return new Response(JSON.stringify({ message: "No autonomous users" }), {
