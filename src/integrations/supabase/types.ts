@@ -669,6 +669,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_cron_headers: { Args: never; Returns: Json }
       get_user_team_id: { Args: { _user_id: string }; Returns: string }
       has_team_role: {
         Args: {
