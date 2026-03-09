@@ -12,6 +12,21 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Auth: require cron secret or valid JWT
+  const cronSecret = req.headers.get("x-cron-secret");
+  const authHeader = req.headers.get("authorization");
+  const CRON_SECRET = Deno.env.get("CRON_SECRET");
+  if (cronSecret !== CRON_SECRET) {
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const anonClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: authHeader } } });
+    const { data: claimsData, error: claimsError } = await anonClient.auth.getClaims(authHeader.replace("Bearer ", ""));
+    if (claimsError || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+  }
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
