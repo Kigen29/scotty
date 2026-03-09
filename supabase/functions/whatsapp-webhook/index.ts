@@ -31,12 +31,44 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Verify HMAC-SHA256 signature from Meta
+    const APP_SECRET = Deno.env.get("WHATSAPP_APP_SECRET");
+    if (!APP_SECRET) {
+      console.error("WHATSAPP_APP_SECRET is not configured");
+      return new Response("Server misconfigured", { status: 500 });
+    }
+
+    const signature = req.headers.get("x-hub-signature-256");
+    if (!signature) {
+      console.error("Missing x-hub-signature-256 header");
+      return new Response("Forbidden", { status: 403 });
+    }
+
+    const rawBody = await req.text();
+
+    // Compute HMAC-SHA256
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(APP_SECRET),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(rawBody));
+    const expectedHex = "sha256=" + Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+    if (signature !== expectedHex) {
+      console.error("Invalid webhook signature");
+      return new Response("Forbidden", { status: 403 });
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const payload = await req.json();
+    const payload = JSON.parse(rawBody);
     console.log("WhatsApp webhook:", JSON.stringify(payload).substring(0, 500));
 
     const entries = payload.entry || [];
