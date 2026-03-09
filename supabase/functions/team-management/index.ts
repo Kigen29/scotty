@@ -208,7 +208,7 @@ Deno.serve(async (req) => {
       case "assign_lead": {
         const { lead_id, assigned_to } = params;
 
-        // Verify both users are on the same team
+        // Verify caller is in a team
         const { data: callerTeam } = await supabase
           .from("team_members")
           .select("team_id")
@@ -216,7 +216,43 @@ Deno.serve(async (req) => {
           .limit(1)
           .maybeSingle();
 
-        if (assigned_to && callerTeam) {
+        if (!callerTeam) {
+          return new Response(JSON.stringify({ error: "You must be in a team to assign leads" }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Verify the lead belongs to a member of the caller's team
+        const { data: leadOwnerTeam } = await supabase
+          .from("leads")
+          .select("user_id")
+          .eq("id", lead_id)
+          .maybeSingle();
+
+        if (!leadOwnerTeam) {
+          return new Response(JSON.stringify({ error: "Lead not found" }), {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const { data: leadOwnerMembership } = await supabase
+          .from("team_members")
+          .select("id")
+          .eq("user_id", leadOwnerTeam.user_id)
+          .eq("team_id", callerTeam.team_id)
+          .limit(1)
+          .maybeSingle();
+
+        if (!leadOwnerMembership) {
+          return new Response(JSON.stringify({ error: "Lead does not belong to your team" }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (assigned_to) {
           const { data: targetMember } = await supabase
             .from("team_members")
             .select("id")
@@ -236,7 +272,8 @@ Deno.serve(async (req) => {
         await supabase
           .from("leads")
           .update({ assigned_to: assigned_to || null })
-          .eq("id", lead_id);
+          .eq("id", lead_id)
+          .eq("user_id", leadOwnerTeam.user_id);
 
         // Send email notification to the assignee
         if (assigned_to) {
