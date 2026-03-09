@@ -6,6 +6,17 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function sanitizeForPrompt(text: string | null | undefined, maxLen = 200): string {
+  if (!text) return "";
+  return text
+    .replace(/ignore\s+(all\s+)?previous\s+instructions?/gi, "[filtered]")
+    .replace(/you\s+are\s+now/gi, "[filtered]")
+    .replace(/system\s*:\s*/gi, "[filtered]")
+    .replace(/\bprompt\s*:/gi, "[filtered]")
+    .replace(/\bassistant\s*:/gi, "[filtered]")
+    .substring(0, maxLen);
+}
+
 function computeICPScore(lead: any, icp: any): number {
   let score = 0;
   let maxScore = 0;
@@ -161,14 +172,14 @@ Deno.serve(async (req) => {
     // Use AI to analyze the lead
     const analysisPrompt = `Analyze this business lead and provide intelligence for a web developer doing outreach.
 
-Business: ${lead.business_name}
-Category: ${lead.category || "Unknown"}
-Location: ${lead.location || "Kenya"}
+Business: ${sanitizeForPrompt(lead.business_name)}
+Category: ${sanitizeForPrompt(lead.category) || "Unknown"}
+Location: ${sanitizeForPrompt(lead.location) || "Kenya"}
 Has Website: ${lead.has_website ? "Yes" : "No"}
-Website URL: ${lead.website_url || "None"}
-Email: ${lead.email || "None"}
-Phone: ${lead.phone || "None"}
-Notes: ${lead.notes || "None"}
+Website URL: ${sanitizeForPrompt(lead.website_url) || "None"}
+Email: ${sanitizeForPrompt(lead.email) || "None"}
+Phone: ${sanitizeForPrompt(lead.phone) || "None"}
+Notes: ${sanitizeForPrompt(lead.notes, 500) || "None"}
 ${icpScore !== null ? `ICP Match Score: ${icpScore}/10` : ""}
 
 ${scrapedContent ? `Scraped website content:\n${scrapedContent}` : ""}

@@ -6,6 +6,17 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function sanitizeForPrompt(text: string | null | undefined, maxLen = 200): string {
+  if (!text) return "";
+  return text
+    .replace(/ignore\s+(all\s+)?previous\s+instructions?/gi, "[filtered]")
+    .replace(/you\s+are\s+now/gi, "[filtered]")
+    .replace(/system\s*:\s*/gi, "[filtered]")
+    .replace(/\bprompt\s*:/gi, "[filtered]")
+    .replace(/\bassistant\s*:/gi, "[filtered]")
+    .substring(0, maxLen);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -93,12 +104,12 @@ Deno.serve(async (req) => {
     const bookingContext = bookingLink ? `\n- Include a booking link for a free consultation: ${bookingLink}` : "";
 
     const templatePrompts: Record<string, string> = {
-      first_touch: `You are Emmanuel Kigen, a freelance web developer reaching out personally to ${lead.business_name}, a ${lead.category || "business"} in ${lead.location || "Kenya"}.
+      first_touch: `You are Emmanuel Kigen, a freelance web developer reaching out personally to ${sanitizeForPrompt(lead.business_name)}, a ${sanitizeForPrompt(lead.category) || "business"} in ${sanitizeForPrompt(lead.location) || "Kenya"}.
 
 Write a compelling personal cold email:
 - They ${lead.has_website ? "have a basic website" : "don't have a website"}, which means they're missing out on online customers
 - Reference their specific industry and how a website/digital presence can help them
-- Mention specific pain points for ${lead.category || "their"} businesses (e.g., manual booking, no online ordering, no customer reviews visibility)
+- Mention specific pain points for ${sanitizeForPrompt(lead.category) || "their"} businesses (e.g., manual booking, no online ordering, no customer reviews visibility)
 - Present yourself as a freelance web developer who personally offers: ${services}${portfolioContext}${analysisContext}
 - Keep it personal, warm, and genuine — you're a real person reaching out, not a company
 - End with a soft call-to-action (suggest a brief call or WhatsApp chat)${bookingContext}
@@ -107,7 +118,7 @@ ${signature ? `- Use this signature: ${signature}` : ""}
 
 The tone should be friendly, personal, and specifically relevant to their business type in Kenya.`,
 
-      follow_up_1: `You are Emmanuel Kigen, a freelance web developer. Write a friendly follow-up email to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+      follow_up_1: `You are Emmanuel Kigen, a freelance web developer. Write a friendly follow-up email to ${sanitizeForPrompt(lead.business_name)} (${sanitizeForPrompt(lead.category) || "business"} in ${sanitizeForPrompt(lead.location) || "Kenya"}).
 This is your first follow-up after your initial personal email went unanswered.
 - Be brief and casual
 - Reference your previous email
@@ -115,14 +126,14 @@ This is your first follow-up after your initial personal email went unanswered.
 - Keep it under 100 words
 - Sign off as Emmanuel`,
 
-      follow_up_2: `You are Emmanuel Kigen, a freelance web developer. Write a second follow-up email to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+      follow_up_2: `You are Emmanuel Kigen, a freelance web developer. Write a second follow-up email to ${sanitizeForPrompt(lead.business_name)} (${sanitizeForPrompt(lead.category) || "business"} in ${sanitizeForPrompt(lead.location) || "Kenya"}).
 - Be more direct but still respectful
 - Share a quick win (e.g., "businesses like yours see 40% more customers with a simple website")
 - Offer something concrete (free consultation, quick demo)
 - Very brief — 50-80 words
 - Sign off as Emmanuel`,
 
-      final_follow_up: `You are Emmanuel Kigen, a freelance web developer. Write a final follow-up email to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+      final_follow_up: `You are Emmanuel Kigen, a freelance web developer. Write a final follow-up email to ${sanitizeForPrompt(lead.business_name)} (${sanitizeForPrompt(lead.category) || "business"} in ${sanitizeForPrompt(lead.location) || "Kenya"}).
 - This is your last email
 - Be gracious and brief
 - Leave the door open

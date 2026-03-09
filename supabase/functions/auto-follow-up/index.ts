@@ -7,12 +7,24 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function sanitizeForPrompt(text: string | null | undefined, maxLen = 200): string {
+  if (!text) return "";
+  return text
+    .replace(/ignore\s+(all\s+)?previous\s+instructions?/gi, "[filtered]")
+    .replace(/you\s+are\s+now/gi, "[filtered]")
+    .replace(/system\s*:\s*/gi, "[filtered]")
+    .replace(/\bprompt\s*:/gi, "[filtered]")
+    .replace(/\bassistant\s*:/gi, "[filtered]")
+    .substring(0, maxLen);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Auth: require cron secret or valid JWT
+  // Auth: require cron secret or valid JWT (JWT scoped to calling user only)
+  let scopedUserId: string | null = null;
   const cronSecret = req.headers.get("x-cron-secret");
   const authHeader = req.headers.get("authorization");
   const CRON_SECRET = Deno.env.get("CRON_SECRET");
@@ -25,6 +37,7 @@ Deno.serve(async (req) => {
     if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    scopedUserId = claimsData.claims.sub as string;
   }
 
   try {
@@ -39,11 +52,10 @@ Deno.serve(async (req) => {
 
     const resend = new Resend(RESEND_API_KEY);
 
-    // Get all autonomous users
-    const { data: allSettings } = await supabase
-      .from("settings")
-      .select("*")
-      .eq("is_autonomous", true);
+    // Get autonomous users (scoped to calling user if JWT auth)
+    let settingsQuery = supabase.from("settings").select("*").eq("is_autonomous", true);
+    if (scopedUserId) settingsQuery = settingsQuery.eq("user_id", scopedUserId);
+    const { data: allSettings } = await settingsQuery;
 
     if (!allSettings?.length) {
       return new Response(JSON.stringify({ message: "No autonomous users" }), {
@@ -161,11 +173,14 @@ Deno.serve(async (req) => {
         const nextTemplate = templateSequence[nextTemplateIndex];
 
         // Generate follow-up email via AI
+        const safeName = sanitizeForPrompt(lead.business_name);
+        const safeCat = sanitizeForPrompt(lead.category);
+        const safeLoc = sanitizeForPrompt(lead.location);
         const prompt = nextTemplate === "follow_up_1"
-          ? `You are Emmanuel Kigen, a freelance web developer. Write a brief first follow-up email to ${lead.business_name} (${lead.category} in ${lead.location}). Reference your previous personal email offering to build them a website. Add a new angle. Under 100 words.`
+          ? `You are Emmanuel Kigen, a freelance web developer. Write a brief first follow-up email to ${safeName} (${safeCat} in ${safeLoc}). Reference your previous personal email offering to build them a website. Add a new angle. Under 100 words.`
           : nextTemplate === "follow_up_2"
-          ? `You are Emmanuel Kigen, a freelance web developer. Write a second follow-up to ${lead.business_name}. Be direct, share a quick win they'd get from having a website. 50-80 words.`
-          : `You are Emmanuel Kigen, a freelance web developer. Write a final follow-up to ${lead.business_name}. Be gracious, leave door open. 40-60 words.`;
+          ? `You are Emmanuel Kigen, a freelance web developer. Write a second follow-up to ${safeName}. Be direct, share a quick win they'd get from having a website. 50-80 words.`
+          : `You are Emmanuel Kigen, a freelance web developer. Write a final follow-up to ${safeName}. Be gracious, leave door open. 40-60 words.`;
 
         try {
           const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

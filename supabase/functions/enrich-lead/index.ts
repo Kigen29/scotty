@@ -6,6 +6,17 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function sanitizeForPrompt(text: string | null | undefined, maxLen = 200): string {
+  if (!text) return "";
+  return text
+    .replace(/ignore\s+(all\s+)?previous\s+instructions?/gi, "[filtered]")
+    .replace(/you\s+are\s+now/gi, "[filtered]")
+    .replace(/system\s*:\s*/gi, "[filtered]")
+    .replace(/\bprompt\s*:/gi, "[filtered]")
+    .replace(/\bassistant\s*:/gi, "[filtered]")
+    .substring(0, maxLen);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -64,14 +75,14 @@ Deno.serve(async (req) => {
       try {
         const prompt = `Research and enrich this business lead with additional intelligence.
 
-Business: ${lead.business_name}
-Category: ${lead.category || "Unknown"}
-Location: ${lead.location || "Kenya"}
-Phone: ${lead.phone || "None"}
-Email: ${lead.email || "None"}
-Website: ${lead.website_url || "None"}
+Business: ${sanitizeForPrompt(lead.business_name)}
+Category: ${sanitizeForPrompt(lead.category) || "Unknown"}
+Location: ${sanitizeForPrompt(lead.location) || "Kenya"}
+Phone: ${sanitizeForPrompt(lead.phone) || "None"}
+Email: ${sanitizeForPrompt(lead.email) || "None"}
+Website: ${sanitizeForPrompt(lead.website_url) || "None"}
 Has Website: ${lead.has_website ? "Yes" : "No"}
-Notes: ${lead.notes || "None"}
+Notes: ${sanitizeForPrompt(lead.notes, 500) || "None"}
 
 Based on your knowledge of businesses in East Africa, provide enrichment data.
 For unknown fields, make reasonable estimates based on the business type and location, but mark them as estimated.`;

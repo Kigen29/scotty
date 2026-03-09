@@ -13,12 +13,24 @@ function isFreeEmail(email: string): boolean {
   return FREE_EMAIL_DOMAINS.includes(domain);
 }
 
+function sanitizeForPrompt(text: string | null | undefined, maxLen = 200): string {
+  if (!text) return "";
+  return text
+    .replace(/ignore\s+(all\s+)?previous\s+instructions?/gi, "[filtered]")
+    .replace(/you\s+are\s+now/gi, "[filtered]")
+    .replace(/system\s*:\s*/gi, "[filtered]")
+    .replace(/\bprompt\s*:/gi, "[filtered]")
+    .replace(/\bassistant\s*:/gi, "[filtered]")
+    .substring(0, maxLen);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Auth: require cron secret or valid JWT
+  // Auth: require cron secret or valid JWT (JWT scoped to calling user only)
+  let scopedUserId: string | null = null;
   const cronSecret = req.headers.get("x-cron-secret");
   const authHeader = req.headers.get("authorization");
   const CRON_SECRET = Deno.env.get("CRON_SECRET");
@@ -31,6 +43,7 @@ Deno.serve(async (req) => {
     if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    scopedUserId = claimsData.claims.sub as string;
   }
 
   try {
@@ -43,10 +56,9 @@ Deno.serve(async (req) => {
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const { data: allSettings } = await supabase
-      .from("settings")
-      .select("*")
-      .eq("is_autonomous", true);
+    let settingsQuery = supabase.from("settings").select("*").eq("is_autonomous", true);
+    if (scopedUserId) settingsQuery = settingsQuery.eq("user_id", scopedUserId);
+    const { data: allSettings } = await settingsQuery;
 
     if (!allSettings || allSettings.length === 0) {
       return new Response(JSON.stringify({ message: "No autonomous users" }), {
@@ -142,8 +154,12 @@ Deno.serve(async (req) => {
           : "";
 
         // Generate message based on channel
+        const safeName = sanitizeForPrompt(lead.business_name);
+        const safeCat = sanitizeForPrompt(lead.category) || "business";
+        const safeLoc = sanitizeForPrompt(lead.location) || "Kenya";
+
         const channelPrompts: Record<string, string> = {
-          email: `Write a compelling personal cold email from ${senderName} to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+          email: `Write a compelling personal cold email from ${senderName} to ${safeName} (${safeCat} in ${safeLoc}).
 - They ${lead.has_website ? "have a basic website" : "don't have a website"}
 - Services offered: ${services}${painPointsText}${solutionsText}
 ${portfolio ? `- Portfolio: ${portfolio}` : ""}
@@ -152,20 +168,20 @@ ${portfolio ? `- Portfolio: ${portfolio}` : ""}
 ${signature ? `- Signature: ${signature}` : ""}
 - Include "Reply STOP to unsubscribe" at the bottom`,
 
-          whatsapp: `Write a short, friendly WhatsApp message from ${senderName} to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+          whatsapp: `Write a short, friendly WhatsApp message from ${senderName} to ${safeName} (${safeCat} in ${safeLoc}).
 - Keep it under 150 words, conversational
 - They ${lead.has_website ? "have a basic website" : "don't have a website"}
 - You offer: ${services}${painPointsText}
 - Be casual but professional — WhatsApp style
 - End with a question to start conversation`,
 
-          instagram_dm: `Write a short Instagram DM from ${senderName} to @${contactValue} (${lead.business_name}, ${lead.category || "business"} in ${lead.location || "Kenya"}).
+          instagram_dm: `Write a short Instagram DM from ${senderName} to @${contactValue} (${safeName}, ${safeCat} in ${safeLoc}).
 - Max 100 words, casual and genuine
 - Compliment their content/business first
 - Mention how you could help with their online presence${painPointsText}
 - End with a friendly question`,
 
-          linkedin: `Write a LinkedIn connection message from ${senderName} to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+          linkedin: `Write a LinkedIn connection message from ${senderName} to ${safeName} (${safeCat} in ${safeLoc}).
 - Max 300 characters (LinkedIn limit)
 - Professional but warm
 - Mention a specific way you could help${painPointsText}`,
