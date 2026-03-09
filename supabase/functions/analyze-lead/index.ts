@@ -108,10 +108,11 @@ Deno.serve(async (req) => {
       .from("leads")
       .select("*")
       .eq("id", lead_id)
+      .eq("user_id", user_id)
       .single();
 
     if (leadError || !lead) {
-      return new Response(JSON.stringify({ error: "Lead not found" }), {
+      return new Response(JSON.stringify({ error: "Lead not found or access denied" }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
