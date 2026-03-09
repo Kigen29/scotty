@@ -173,11 +173,14 @@ Deno.serve(async (req) => {
         const nextTemplate = templateSequence[nextTemplateIndex];
 
         // Generate follow-up email via AI
+        const safeName = sanitizeForPrompt(lead.business_name);
+        const safeCat = sanitizeForPrompt(lead.category);
+        const safeLoc = sanitizeForPrompt(lead.location);
         const prompt = nextTemplate === "follow_up_1"
-          ? `You are Emmanuel Kigen, a freelance web developer. Write a brief first follow-up email to ${lead.business_name} (${lead.category} in ${lead.location}). Reference your previous personal email offering to build them a website. Add a new angle. Under 100 words.`
+          ? `You are Emmanuel Kigen, a freelance web developer. Write a brief first follow-up email to ${safeName} (${safeCat} in ${safeLoc}). Reference your previous personal email offering to build them a website. Add a new angle. Under 100 words.`
           : nextTemplate === "follow_up_2"
-          ? `You are Emmanuel Kigen, a freelance web developer. Write a second follow-up to ${lead.business_name}. Be direct, share a quick win they'd get from having a website. 50-80 words.`
-          : `You are Emmanuel Kigen, a freelance web developer. Write a final follow-up to ${lead.business_name}. Be gracious, leave door open. 40-60 words.`;
+          ? `You are Emmanuel Kigen, a freelance web developer. Write a second follow-up to ${safeName}. Be direct, share a quick win they'd get from having a website. 50-80 words.`
+          : `You are Emmanuel Kigen, a freelance web developer. Write a final follow-up to ${safeName}. Be gracious, leave door open. 40-60 words.`;
 
         try {
           const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

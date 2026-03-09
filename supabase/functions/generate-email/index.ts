@@ -118,7 +118,7 @@ ${signature ? `- Use this signature: ${signature}` : ""}
 
 The tone should be friendly, personal, and specifically relevant to their business type in Kenya.`,
 
-      follow_up_1: `You are Emmanuel Kigen, a freelance web developer. Write a friendly follow-up email to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+      follow_up_1: `You are Emmanuel Kigen, a freelance web developer. Write a friendly follow-up email to ${sanitizeForPrompt(lead.business_name)} (${sanitizeForPrompt(lead.category) || "business"} in ${sanitizeForPrompt(lead.location) || "Kenya"}).
 This is your first follow-up after your initial personal email went unanswered.
 - Be brief and casual
 - Reference your previous email
@@ -126,14 +126,14 @@ This is your first follow-up after your initial personal email went unanswered.
 - Keep it under 100 words
 - Sign off as Emmanuel`,
 
-      follow_up_2: `You are Emmanuel Kigen, a freelance web developer. Write a second follow-up email to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+      follow_up_2: `You are Emmanuel Kigen, a freelance web developer. Write a second follow-up email to ${sanitizeForPrompt(lead.business_name)} (${sanitizeForPrompt(lead.category) || "business"} in ${sanitizeForPrompt(lead.location) || "Kenya"}).
 - Be more direct but still respectful
 - Share a quick win (e.g., "businesses like yours see 40% more customers with a simple website")
 - Offer something concrete (free consultation, quick demo)
 - Very brief — 50-80 words
 - Sign off as Emmanuel`,
 
-      final_follow_up: `You are Emmanuel Kigen, a freelance web developer. Write a final follow-up email to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+      final_follow_up: `You are Emmanuel Kigen, a freelance web developer. Write a final follow-up email to ${sanitizeForPrompt(lead.business_name)} (${sanitizeForPrompt(lead.category) || "business"} in ${sanitizeForPrompt(lead.location) || "Kenya"}).
 - This is your last email
 - Be gracious and brief
 - Leave the door open

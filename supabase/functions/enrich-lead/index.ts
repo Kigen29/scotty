@@ -75,14 +75,14 @@ Deno.serve(async (req) => {
       try {
         const prompt = `Research and enrich this business lead with additional intelligence.
 
-Business: ${lead.business_name}
-Category: ${lead.category || "Unknown"}
-Location: ${lead.location || "Kenya"}
-Phone: ${lead.phone || "None"}
-Email: ${lead.email || "None"}
-Website: ${lead.website_url || "None"}
+Business: ${sanitizeForPrompt(lead.business_name)}
+Category: ${sanitizeForPrompt(lead.category) || "Unknown"}
+Location: ${sanitizeForPrompt(lead.location) || "Kenya"}
+Phone: ${sanitizeForPrompt(lead.phone) || "None"}
+Email: ${sanitizeForPrompt(lead.email) || "None"}
+Website: ${sanitizeForPrompt(lead.website_url) || "None"}
 Has Website: ${lead.has_website ? "Yes" : "No"}
-Notes: ${lead.notes || "None"}
+Notes: ${sanitizeForPrompt(lead.notes, 500) || "None"}
 
 Based on your knowledge of businesses in East Africa, provide enrichment data.
 For unknown fields, make reasonable estimates based on the business type and location, but mark them as estimated.`;

@@ -154,8 +154,12 @@ Deno.serve(async (req) => {
           : "";
 
         // Generate message based on channel
+        const safeName = sanitizeForPrompt(lead.business_name);
+        const safeCat = sanitizeForPrompt(lead.category) || "business";
+        const safeLoc = sanitizeForPrompt(lead.location) || "Kenya";
+
         const channelPrompts: Record<string, string> = {
-          email: `Write a compelling personal cold email from ${senderName} to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+          email: `Write a compelling personal cold email from ${senderName} to ${safeName} (${safeCat} in ${safeLoc}).
 - They ${lead.has_website ? "have a basic website" : "don't have a website"}
 - Services offered: ${services}${painPointsText}${solutionsText}
 ${portfolio ? `- Portfolio: ${portfolio}` : ""}
@@ -164,20 +168,20 @@ ${portfolio ? `- Portfolio: ${portfolio}` : ""}
 ${signature ? `- Signature: ${signature}` : ""}
 - Include "Reply STOP to unsubscribe" at the bottom`,
 
-          whatsapp: `Write a short, friendly WhatsApp message from ${senderName} to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+          whatsapp: `Write a short, friendly WhatsApp message from ${senderName} to ${safeName} (${safeCat} in ${safeLoc}).
 - Keep it under 150 words, conversational
 - They ${lead.has_website ? "have a basic website" : "don't have a website"}
 - You offer: ${services}${painPointsText}
 - Be casual but professional — WhatsApp style
 - End with a question to start conversation`,
 
-          instagram_dm: `Write a short Instagram DM from ${senderName} to @${contactValue} (${lead.business_name}, ${lead.category || "business"} in ${lead.location || "Kenya"}).
+          instagram_dm: `Write a short Instagram DM from ${senderName} to @${contactValue} (${safeName}, ${safeCat} in ${safeLoc}).
 - Max 100 words, casual and genuine
 - Compliment their content/business first
 - Mention how you could help with their online presence${painPointsText}
 - End with a friendly question`,
 
-          linkedin: `Write a LinkedIn connection message from ${senderName} to ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"}).
+          linkedin: `Write a LinkedIn connection message from ${senderName} to ${safeName} (${safeCat} in ${safeLoc}).
 - Max 300 characters (LinkedIn limit)
 - Professional but warm
 - Mention a specific way you could help${painPointsText}`,

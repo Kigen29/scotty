@@ -125,16 +125,19 @@ Deno.serve(async (req) => {
       const step = steps[currentStepIndex];
       if (!step) continue;
 
-      // Personalize subject and prompt
+      // Personalize subject and prompt (sanitize lead fields to prevent prompt injection)
+      const safeName = sanitizeForPrompt(lead.business_name);
+      const safeCat = sanitizeForPrompt(lead.category);
+      const safeLoc = sanitizeForPrompt(lead.location);
       const personalize = (text: string) =>
         text
-          .replace(/\{\{business_name\}\}/g, lead.business_name || "")
-          .replace(/\{\{category\}\}/g, lead.category || "")
-          .replace(/\{\{location\}\}/g, lead.location || "");
+          .replace(/\{\{business_name\}\}/g, safeName)
+          .replace(/\{\{category\}\}/g, safeCat || "")
+          .replace(/\{\{location\}\}/g, safeLoc || "");
 
       const subject = personalize(step.subject || `Follow-up #${currentStepIndex + 1}`);
       const bodyPrompt = personalize(
-        step.body_prompt || step.body || `Write a follow-up email to ${lead.business_name}`
+        step.body_prompt || step.body || `Write a follow-up email to ${safeName}`
       );
 
       // Get user settings for sender info

@@ -172,14 +172,14 @@ Deno.serve(async (req) => {
     // Use AI to analyze the lead
     const analysisPrompt = `Analyze this business lead and provide intelligence for a web developer doing outreach.
 
-Business: ${lead.business_name}
-Category: ${lead.category || "Unknown"}
-Location: ${lead.location || "Kenya"}
+Business: ${sanitizeForPrompt(lead.business_name)}
+Category: ${sanitizeForPrompt(lead.category) || "Unknown"}
+Location: ${sanitizeForPrompt(lead.location) || "Kenya"}
 Has Website: ${lead.has_website ? "Yes" : "No"}
-Website URL: ${lead.website_url || "None"}
-Email: ${lead.email || "None"}
-Phone: ${lead.phone || "None"}
-Notes: ${lead.notes || "None"}
+Website URL: ${sanitizeForPrompt(lead.website_url) || "None"}
+Email: ${sanitizeForPrompt(lead.email) || "None"}
+Phone: ${sanitizeForPrompt(lead.phone) || "None"}
+Notes: ${sanitizeForPrompt(lead.notes, 500) || "None"}
 ${icpScore !== null ? `ICP Match Score: ${icpScore}/10` : ""}
 
 ${scrapedContent ? `Scraped website content:\n${scrapedContent}` : ""}
