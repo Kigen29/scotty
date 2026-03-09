@@ -91,12 +91,14 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("Missing LOVABLE_API_KEY");
 
+    // Sanitize lead fields and treat inbound message as untrusted data
+    const safeMessage = sanitizeForPrompt(message, 500);
     const classifyPrompt = `Classify this business reply and draft an appropriate response.
 
-Business: ${lead.business_name} (${lead.category || "business"} in ${lead.location || "Kenya"})
+Business: ${sanitizeForPrompt(lead.business_name)} (${sanitizeForPrompt(lead.category) || "business"} in ${sanitizeForPrompt(lead.location) || "Kenya"})
 
 Previous conversation:
-${(prevMessages || []).map((m) => `${m.direction === "outbound" ? "You" : "Them"}: ${m.message}`).join("\n")}
+${(prevMessages || []).map((m) => `${m.direction === "outbound" ? "You" : "Them"}: ${sanitizeForPrompt(m.message, 500)}`).join("\n")}
 
 New reply from them: "${message}"
 
