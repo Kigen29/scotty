@@ -61,6 +61,31 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Authenticate the caller
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseUser = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const user_id = claimsData.claims.sub;
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -70,9 +95,9 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("Missing LOVABLE_API_KEY");
 
-    const { lead_id, user_id } = await req.json();
-    if (!lead_id || !user_id) {
-      return new Response(JSON.stringify({ error: "lead_id and user_id required" }), {
+    const { lead_id } = await req.json();
+    if (!lead_id) {
+      return new Response(JSON.stringify({ error: "lead_id required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -83,10 +108,11 @@ Deno.serve(async (req) => {
       .from("leads")
       .select("*")
       .eq("id", lead_id)
+      .eq("user_id", user_id)
       .single();
 
     if (leadError || !lead) {
-      return new Response(JSON.stringify({ error: "Lead not found" }), {
+      return new Response(JSON.stringify({ error: "Lead not found or access denied" }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

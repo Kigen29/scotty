@@ -671,13 +671,22 @@ export type Database = {
     Functions: {
       get_cron_headers: { Args: never; Returns: Json }
       get_user_team_id: { Args: { _user_id: string }; Returns: string }
-      has_team_role: {
-        Args: {
-          _role: Database["public"]["Enums"]["team_role"]
-          _user_id: string
-        }
-        Returns: boolean
-      }
+      has_team_role:
+        | {
+            Args: {
+              _role: Database["public"]["Enums"]["team_role"]
+              _user_id: string
+            }
+            Returns: boolean
+          }
+        | {
+            Args: {
+              _role: Database["public"]["Enums"]["team_role"]
+              _team_id: string
+              _user_id: string
+            }
+            Returns: boolean
+          }
       is_team_member: {
         Args: { _team_id: string; _user_id: string }
         Returns: boolean
