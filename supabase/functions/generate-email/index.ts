@@ -104,12 +104,12 @@ Deno.serve(async (req) => {
     const bookingContext = bookingLink ? `\n- Include a booking link for a free consultation: ${bookingLink}` : "";
 
     const templatePrompts: Record<string, string> = {
-      first_touch: `You are Emmanuel Kigen, a freelance web developer reaching out personally to ${lead.business_name}, a ${lead.category || "business"} in ${lead.location || "Kenya"}.
+      first_touch: `You are Emmanuel Kigen, a freelance web developer reaching out personally to ${sanitizeForPrompt(lead.business_name)}, a ${sanitizeForPrompt(lead.category) || "business"} in ${sanitizeForPrompt(lead.location) || "Kenya"}.
 
 Write a compelling personal cold email:
 - They ${lead.has_website ? "have a basic website" : "don't have a website"}, which means they're missing out on online customers
 - Reference their specific industry and how a website/digital presence can help them
-- Mention specific pain points for ${lead.category || "their"} businesses (e.g., manual booking, no online ordering, no customer reviews visibility)
+- Mention specific pain points for ${sanitizeForPrompt(lead.category) || "their"} businesses (e.g., manual booking, no online ordering, no customer reviews visibility)
 - Present yourself as a freelance web developer who personally offers: ${services}${portfolioContext}${analysisContext}
 - Keep it personal, warm, and genuine — you're a real person reaching out, not a company
 - End with a soft call-to-action (suggest a brief call or WhatsApp chat)${bookingContext}
