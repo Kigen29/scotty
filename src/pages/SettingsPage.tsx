@@ -328,6 +328,43 @@ const SettingsPage = () => {
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2"><MessageCircle className="h-4 w-4" /> WhatsApp Business API</CardTitle>
+              <CardDescription className="text-xs">Auto-send WhatsApp messages to leads via Meta Cloud API</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border">
+                <Key className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-xs font-medium">Setup Instructions</p>
+                  <ol className="text-[11px] text-muted-foreground mt-1 space-y-1 list-decimal list-inside">
+                    <li>Go to <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="underline text-primary">Meta for Developers</a> and create a WhatsApp Business app</li>
+                    <li>Get your <strong>Permanent Access Token</strong> from the API Setup page</li>
+                    <li>Copy your <strong>Phone Number ID</strong> from the same page</li>
+                    <li>Add a webhook URL: <code className="bg-muted px-1 rounded text-[10px]">https://hiivjkyluljoffceyfpe.supabase.co/functions/v1/whatsapp-webhook</code></li>
+                  </ol>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Business API Token</Label>
+                <Input type="password" placeholder="••••••••••••••••" disabled className="h-9 bg-muted/30" />
+                <p className="text-[10px] text-muted-foreground">Stored as a secure backend secret. Update via Lovable Cloud settings.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Phone Number ID</Label>
+                <Input type="password" placeholder="••••••••••••••••" disabled className="h-9 bg-muted/30" />
+                <p className="text-[10px] text-muted-foreground">Stored as a secure backend secret. Update via Lovable Cloud settings.</p>
+              </div>
+              <div className="flex items-start gap-2 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+                <Zap className="h-3.5 w-3.5 text-emerald-600 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                  <strong>Status:</strong> WhatsApp credentials are configured. The outreach agent will auto-send WhatsApp messages to leads with phone numbers.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Automation Tab */}
