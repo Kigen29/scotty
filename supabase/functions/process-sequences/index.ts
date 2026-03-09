@@ -13,12 +13,24 @@ function isFreeEmail(email: string): boolean {
   return FREE_EMAIL_DOMAINS.includes(domain);
 }
 
+function sanitizeForPrompt(text: string | null | undefined, maxLen = 200): string {
+  if (!text) return "";
+  return text
+    .replace(/ignore\s+(all\s+)?previous\s+instructions?/gi, "[filtered]")
+    .replace(/you\s+are\s+now/gi, "[filtered]")
+    .replace(/system\s*:\s*/gi, "[filtered]")
+    .replace(/\bprompt\s*:/gi, "[filtered]")
+    .replace(/\bassistant\s*:/gi, "[filtered]")
+    .substring(0, maxLen);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Auth: require cron secret or valid JWT
+  // Auth: require cron secret or valid JWT (JWT scoped to calling user only)
+  let scopedUserId: string | null = null;
   const cronSecret = req.headers.get("x-cron-secret");
   const authHeader = req.headers.get("authorization");
   const CRON_SECRET = Deno.env.get("CRON_SECRET");
@@ -31,6 +43,7 @@ Deno.serve(async (req) => {
     if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    scopedUserId = claimsData.claims.sub as string;
   }
 
   try {
@@ -43,14 +56,16 @@ Deno.serve(async (req) => {
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    // Get all active enrollments that are due
+    // Get active enrollments that are due (scoped to calling user if JWT auth)
     const now = new Date().toISOString();
-    const { data: enrollments, error: enrollErr } = await supabase
+    let enrollQuery = supabase
       .from("sequence_enrollments")
       .select("*, sequences(*), leads(*)")
       .eq("status", "active")
       .or(`next_step_at.lte.${now},and(next_step_at.is.null,current_step.eq.0)`)
       .limit(50);
+    if (scopedUserId) enrollQuery = enrollQuery.eq("user_id", scopedUserId);
+    const { data: enrollments, error: enrollErr } = await enrollQuery;
 
     if (enrollErr) throw enrollErr;
     if (!enrollments || enrollments.length === 0) {
