@@ -269,7 +269,7 @@ This is your first follow-up after your initial personal email went unanswered.
   } catch (error) {
     console.error("generate-email error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: "An internal error occurred. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

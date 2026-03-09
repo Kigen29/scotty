@@ -252,7 +252,7 @@ Classify the response and generate a reply as Emmanuel Kigen, freelance web deve
   } catch (error) {
     console.error("classify-response error:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: "An internal error occurred. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
