@@ -79,9 +79,9 @@ Deno.serve(async (req) => {
 
     const { data: campaign } = await supabase
       .from("email_campaigns")
-      .select("id, ab_test_id, ab_variant")
+      .select("id, ab_test_id, ab_variant, status")
       .eq("lead_id", lead.id)
-      .eq("status", "sent")
+      .in("status", ["sent", "opened", "delivered", "replied"])
       .order("sent_at", { ascending: false })
       .limit(1)
       .maybeSingle();
