@@ -45,7 +45,7 @@ const Reports = () => {
   const fl = filterByDate(leads);
   const fc = filterByDate(campaigns);
 
-  const sent = fc.filter((c) => c.status !== "draft").length;
+  const sent = fc.filter((c) => c.sent_at != null).length;
   const replied = fc.filter((c) => c.status === "replied").length;
   const rate = sent > 0 ? ((replied / sent) * 100).toFixed(1) : "0";
 
