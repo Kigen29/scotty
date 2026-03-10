@@ -88,20 +88,20 @@ Deno.serve(async (req) => {
     await resend.emails.send({
       from: "ScoutAgent <onboarding@resend.dev>",
       to: [assigneeProfile.email],
-      subject: `🎯 ${isAutoAssigned ? "Auto-assigned" : "New"} lead: ${record.business_name}`,
+      subject: `🎯 ${isAutoAssigned ? "Auto-assigned" : "New"} lead: ${esc(record.business_name)}`,
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px;">
-          <h2 style="margin: 0 0 8px;">Hey ${assigneeName} 👋</h2>
+          <h2 style="margin: 0 0 8px;">Hey ${esc(assigneeName)} 👋</h2>
           <p style="color: #555; margin: 0 0 20px;">
             ${isAutoAssigned
               ? "A new lead was auto-assigned to you via round-robin."
-              : `${assignerName} assigned you a new lead.`}
+              : `${esc(assignerName)} assigned you a new lead.`}
           </p>
           <div style="background: #f8f9fa; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
-            <h3 style="margin: 0 0 8px;">${record.business_name}</h3>
-            ${record.category ? `<p style="margin: 4px 0; color: #666;">📁 ${record.category}</p>` : ""}
-            ${record.location ? `<p style="margin: 4px 0; color: #666;">📍 ${record.location}</p>` : ""}
-            ${record.email ? `<p style="margin: 4px 0; color: #666;">✉️ ${record.email}</p>` : ""}
+            <h3 style="margin: 0 0 8px;">${esc(record.business_name)}</h3>
+            ${record.category ? `<p style="margin: 4px 0; color: #666;">📁 ${esc(record.category)}</p>` : ""}
+            ${record.location ? `<p style="margin: 4px 0; color: #666;">📍 ${esc(record.location)}</p>` : ""}
+            ${record.email ? `<p style="margin: 4px 0; color: #666;">✉️ ${esc(record.email)}</p>` : ""}
           </div>
           <p style="color: #888; font-size: 13px;">Log in to ScoutAgent to take action on this lead.</p>
         </div>
