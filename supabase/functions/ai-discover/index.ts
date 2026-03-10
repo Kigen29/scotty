@@ -326,7 +326,7 @@ Provide:
         if (!biz.email) continue;
 
         try {
-          const emailPrompt = `You are Emmanuel Kigen, a freelance web developer reaching out to ${biz.business_name}, a ${biz.category || category} business in ${biz.location || location}, Kenya.
+          const emailPrompt = `You are Emmanuel Kigen, a freelance web developer reaching out to ${sanitizeForPrompt(biz.business_name)}, a ${sanitizeForPrompt(biz.category || category)} business in ${sanitizeForPrompt(biz.location || location)}, Kenya.
 
 They have NO website — only word of mouth and foot traffic. Write a compelling, personal cold email:
 - Reference their specific business type and location

@@ -147,10 +147,10 @@ Deno.serve(async (req) => {
         // Build analysis context
         const analysis = (lead as any).analysis;
         const painPointsText = analysis?.pain_points?.length
-          ? `\nPain points: ${analysis.pain_points.join("; ")}`
+          ? `\nPain points: ${analysis.pain_points.map((p: string) => sanitizeForPrompt(p)).join("; ")}`
           : "";
         const solutionsText = analysis?.recommended_solutions?.length
-          ? `\nSolutions: ${analysis.recommended_solutions.join("; ")}`
+          ? `\nSolutions: ${analysis.recommended_solutions.map((s: string) => sanitizeForPrompt(s)).join("; ")}`
           : "";
 
         // Generate message based on channel

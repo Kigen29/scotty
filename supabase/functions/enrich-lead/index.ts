@@ -192,7 +192,7 @@ For unknown fields, make reasonable estimates based on the business type and loc
 
       } catch (e) {
         console.error(`Enrichment failed for ${lead.id}:`, e);
-        results.push({ id: lead.id, status: "error", error: e instanceof Error ? e.message : "Unknown" });
+        results.push({ id: lead.id, status: "error" });
       }
     }
 
