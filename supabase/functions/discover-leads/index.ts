@@ -60,11 +60,16 @@ Deno.serve(async (req) => {
     const pipeline = (userSettings as any)?.discovery_pipeline || "firecrawl";
     console.log(`User ${userId} pipeline: ${pipeline}`);
 
+    // Sanitize user inputs before use in prompts
+    const safeCategory = sanitizeForPrompt(category);
+    const safeLocation = sanitizeForPrompt(location);
+    const safeQuery = sanitizeForPrompt(query, 300);
+
     // Build search terms
     const searchTerms = [];
-    if (category) searchTerms.push(category);
-    if (location) searchTerms.push(location);
-    if (query) searchTerms.push(query);
+    if (safeCategory) searchTerms.push(safeCategory);
+    if (safeLocation) searchTerms.push(safeLocation);
+    if (safeQuery) searchTerms.push(safeQuery);
     searchTerms.push("Kenya small business no website local");
     const searchQuery = searchTerms.join(" ");
 
