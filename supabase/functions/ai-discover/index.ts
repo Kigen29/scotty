@@ -242,12 +242,12 @@ IMPORTANT: Do NOT invent businesses that are likely to have websites. Skip chain
         try {
           const analysisPrompt = `Analyze this Kenyan business found via AI research with NO website.
 
-Business: ${biz.business_name}
-Category: ${biz.category || category}
-Location: ${biz.location || location}
-Address: ${biz.address || "Unknown"}
-Phone: ${biz.phone || "None"}
-Email: ${biz.email || "None"}
+Business: ${sanitizeForPrompt(biz.business_name)}
+Category: ${sanitizeForPrompt(biz.category || category)}
+Location: ${sanitizeForPrompt(biz.location || location)}
+Address: ${sanitizeForPrompt(biz.address) || "Unknown"}
+Phone: ${sanitizeForPrompt(biz.phone) || "None"}
+Email: ${sanitizeForPrompt(biz.email) || "None"}
 
 This business has NO website — they rely entirely on word of mouth and foot traffic.
 
