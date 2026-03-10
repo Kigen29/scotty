@@ -6,6 +6,19 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function sanitizeForPrompt(text: string | null | undefined, maxLen = 200): string {
+  if (!text) return "";
+  return text
+    .replace(/ignore\s+(all\s+)?previous\s+instructions?/gi, "[filtered]")
+    .replace(/system\s*:\s*/gi, "[filtered]")
+    .replace(/you\s+are\s+now/gi, "[filtered]")
+    .replace(/disregard\s+(all\s+)?above/gi, "[filtered]")
+    .replace(/forget\s+(all\s+)?prior/gi, "[filtered]")
+    .replace(/\bprompt\s*:/gi, "[filtered]")
+    .replace(/\bassistant\s*:/gi, "[filtered]")
+    .substring(0, maxLen);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -16,7 +29,7 @@ Deno.serve(async (req) => {
   const authHeader = req.headers.get("authorization");
   const CRON_SECRET = Deno.env.get("CRON_SECRET");
   let callerUserId: string | null = null;
-  const isCron = cronSecret === CRON_SECRET;
+  const isCron = CRON_SECRET && CRON_SECRET.length >= 16 && cronSecret === CRON_SECRET;
   if (!isCron) {
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -296,12 +309,12 @@ Only include businesses you believe actually exist.`;
             const portfolioProjects = userSettings.portfolio_projects || [];
             const analysisPrompt = `Analyze this Kenyan business found on ${platform.name} with NO website.
 
-Business: ${biz.business_name}
-Category: ${biz.category || category}
-Location: ${biz.location || location}
-${platform.name} Handle: @${biz.handle || "unknown"}
-Contact: phone=${biz.phone || "none"}, whatsapp=${biz.whatsapp || "none"}, email=${biz.email || "none"}
-Bio: ${biz.bio_summary || "N/A"}
+Business: ${sanitizeForPrompt(biz.business_name)}
+Category: ${sanitizeForPrompt(biz.category || category)}
+Location: ${sanitizeForPrompt(biz.location || location)}
+${platform.name} Handle: @${sanitizeForPrompt(biz.handle || "unknown")}
+Contact: phone=${sanitizeForPrompt(biz.phone) || "none"}, whatsapp=${sanitizeForPrompt(biz.whatsapp) || "none"}, email=${sanitizeForPrompt(biz.email) || "none"}
+Bio: ${sanitizeForPrompt(biz.bio_summary, 500) || "N/A"}
 
 Their entire online presence is just a ${platform.name} page — no website at all.
 This makes them an ideal target for web development services.

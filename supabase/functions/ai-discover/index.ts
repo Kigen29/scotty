@@ -6,6 +6,19 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function sanitizeForPrompt(text: string | null | undefined, maxLen = 200): string {
+  if (!text) return "";
+  return text
+    .replace(/ignore\s+(all\s+)?previous\s+instructions?/gi, "[filtered]")
+    .replace(/system\s*:\s*/gi, "[filtered]")
+    .replace(/you\s+are\s+now/gi, "[filtered]")
+    .replace(/disregard\s+(all\s+)?above/gi, "[filtered]")
+    .replace(/forget\s+(all\s+)?prior/gi, "[filtered]")
+    .replace(/\bprompt\s*:/gi, "[filtered]")
+    .replace(/\bassistant\s*:/gi, "[filtered]")
+    .substring(0, maxLen);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -16,7 +29,7 @@ Deno.serve(async (req) => {
   const cronSecret = req.headers.get("x-cron-secret");
   const authHeader = req.headers.get("authorization");
   const CRON_SECRET = Deno.env.get("CRON_SECRET");
-  if (cronSecret !== CRON_SECRET) {
+  if (!CRON_SECRET || CRON_SECRET.length < 16 || cronSecret !== CRON_SECRET) {
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -242,12 +255,12 @@ IMPORTANT: Do NOT invent businesses that are likely to have websites. Skip chain
         try {
           const analysisPrompt = `Analyze this Kenyan business found via AI research with NO website.
 
-Business: ${biz.business_name}
-Category: ${biz.category || category}
-Location: ${biz.location || location}
-Address: ${biz.address || "Unknown"}
-Phone: ${biz.phone || "None"}
-Email: ${biz.email || "None"}
+Business: ${sanitizeForPrompt(biz.business_name)}
+Category: ${sanitizeForPrompt(biz.category || category)}
+Location: ${sanitizeForPrompt(biz.location || location)}
+Address: ${sanitizeForPrompt(biz.address) || "Unknown"}
+Phone: ${sanitizeForPrompt(biz.phone) || "None"}
+Email: ${sanitizeForPrompt(biz.email) || "None"}
 
 This business has NO website — they rely entirely on word of mouth and foot traffic.
 
@@ -326,7 +339,7 @@ Provide:
         if (!biz.email) continue;
 
         try {
-          const emailPrompt = `You are Emmanuel Kigen, a freelance web developer reaching out to ${biz.business_name}, a ${biz.category || category} business in ${biz.location || location}, Kenya.
+          const emailPrompt = `You are Emmanuel Kigen, a freelance web developer reaching out to ${sanitizeForPrompt(biz.business_name)}, a ${sanitizeForPrompt(biz.category || category)} business in ${sanitizeForPrompt(biz.location || location)}, Kenya.
 
 They have NO website — only word of mouth and foot traffic. Write a compelling, personal cold email:
 - Reference their specific business type and location

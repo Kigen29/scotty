@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
   const cronSecret = req.headers.get("x-cron-secret");
   const authHeader = req.headers.get("authorization");
   const CRON_SECRET = Deno.env.get("CRON_SECRET");
-  if (cronSecret !== CRON_SECRET) {
+  if (!CRON_SECRET || CRON_SECRET.length < 16 || cronSecret !== CRON_SECRET) {
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -274,13 +274,13 @@ Target category: ${category}. Target location: ${location}, Kenya.`;
           const portfolioProjects = userSettings.portfolio_projects || [];
           const analysisPrompt = `Analyze this Kenyan business found on Google Maps with NO website.
 
-Business: ${biz.business_name}
-Category: ${biz.category || category}
-Location: ${biz.location || location}
-Address: ${biz.address || "Unknown"}
-Phone: ${biz.phone || "None"}
-Email: ${biz.email || "None"}
-Google Maps: ${biz.google_maps_url || "None"}
+Business: ${sanitizeForPrompt(biz.business_name)}
+Category: ${sanitizeForPrompt(biz.category || category)}
+Location: ${sanitizeForPrompt(biz.location || location)}
+Address: ${sanitizeForPrompt(biz.address) || "Unknown"}
+Phone: ${sanitizeForPrompt(biz.phone) || "None"}
+Email: ${sanitizeForPrompt(biz.email) || "None"}
+Google Maps: ${sanitizeForPrompt(biz.google_maps_url) || "None"}
 
 This business has NO website — they rely entirely on word of mouth and foot traffic.
 They are our IDEAL target for web development services.

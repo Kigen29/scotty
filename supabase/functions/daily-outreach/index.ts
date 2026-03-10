@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
   const cronSecret = req.headers.get("x-cron-secret");
   const authHeader = req.headers.get("authorization");
   const CRON_SECRET = Deno.env.get("CRON_SECRET");
-  if (cronSecret !== CRON_SECRET) {
+  if (!CRON_SECRET || CRON_SECRET.length < 16 || cronSecret !== CRON_SECRET) {
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -147,10 +147,10 @@ Deno.serve(async (req) => {
         // Build analysis context
         const analysis = (lead as any).analysis;
         const painPointsText = analysis?.pain_points?.length
-          ? `\nPain points: ${analysis.pain_points.join("; ")}`
+          ? `\nPain points: ${analysis.pain_points.map((p: string) => sanitizeForPrompt(p)).join("; ")}`
           : "";
         const solutionsText = analysis?.recommended_solutions?.length
-          ? `\nSolutions: ${analysis.recommended_solutions.join("; ")}`
+          ? `\nSolutions: ${analysis.recommended_solutions.map((s: string) => sanitizeForPrompt(s)).join("; ")}`
           : "";
 
         // Generate message based on channel
