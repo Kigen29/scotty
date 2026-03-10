@@ -163,8 +163,8 @@ Content: ${(r.markdown || "").substring(0, 800)}
 `).join("\n")}
 
 Extract businesses and return them using the extract_businesses function.
-Category should be: ${category || "general"}.
-Location should default to: ${location || "Kenya"}.`
+Category should be: ${safeCategory || "general"}.
+Location should default to: ${safeLocation || "Kenya"}.`
       : `You are a local business researcher specializing in Kenyan small businesses.
 
 Your task: Find REAL small businesses in the category "${category || "general"}" located in "${location || "Kenya"}" that do NOT have their own website.
