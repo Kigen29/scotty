@@ -57,6 +57,17 @@ const REFINE_TOOLS = [
   },
 ];
 
+function sanitizeForPrompt(text: string | null | undefined, maxLen = 200): string {
+  if (!text) return "";
+  return text
+    .replace(/ignore\s+(all\s+)?previous\s+instructions?/gi, "[filtered]")
+    .replace(/system\s*:\s*/gi, "[filtered]")
+    .replace(/you\s+are\s+now/gi, "[filtered]")
+    .replace(/disregard\s+(all\s+)?above/gi, "[filtered]")
+    .replace(/forget\s+(all\s+)?prior/gi, "[filtered]")
+    .substring(0, maxLen);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
