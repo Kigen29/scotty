@@ -107,7 +107,7 @@ serve(async (req) => {
         },
         {
           role: "user",
-          content: `Improve this email step:\n\nSubject: ${existing_step?.subject || ""}\nBody prompt: ${existing_step?.body_prompt || ""}\n\nMake it more engaging, specific, and action-oriented.`,
+          content: `Improve this email step:\n\nSubject: ${safeSubject}\nBody prompt: ${safeBodyPrompt}\n\nMake it more engaging, specific, and action-oriented.`,
         },
       ];
       tools = REFINE_TOOLS;
