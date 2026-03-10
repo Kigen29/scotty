@@ -90,6 +90,9 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     const { goal, num_steps, existing_step, mode } = await req.json();
+    const safeGoal = sanitizeForPrompt(goal, 500);
+    const safeSubject = sanitizeForPrompt(existing_step?.subject);
+    const safeBodyPrompt = sanitizeForPrompt(existing_step?.body_prompt, 500);
 
     let messages: any[];
     let tools: any[];
