@@ -57,6 +57,17 @@ const REFINE_TOOLS = [
   },
 ];
 
+function sanitizeForPrompt(text: string | null | undefined, maxLen = 200): string {
+  if (!text) return "";
+  return text
+    .replace(/ignore\s+(all\s+)?previous\s+instructions?/gi, "[filtered]")
+    .replace(/system\s*:\s*/gi, "[filtered]")
+    .replace(/you\s+are\s+now/gi, "[filtered]")
+    .replace(/disregard\s+(all\s+)?above/gi, "[filtered]")
+    .replace(/forget\s+(all\s+)?prior/gi, "[filtered]")
+    .substring(0, maxLen);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -79,6 +90,9 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     const { goal, num_steps, existing_step, mode } = await req.json();
+    const safeGoal = sanitizeForPrompt(goal, 500);
+    const safeSubject = sanitizeForPrompt(existing_step?.subject);
+    const safeBodyPrompt = sanitizeForPrompt(existing_step?.body_prompt, 500);
 
     let messages: any[];
     let tools: any[];
@@ -93,7 +107,7 @@ serve(async (req) => {
         },
         {
           role: "user",
-          content: `Improve this email step:\n\nSubject: ${existing_step?.subject || ""}\nBody prompt: ${existing_step?.body_prompt || ""}\n\nMake it more engaging, specific, and action-oriented.`,
+          content: `Improve this email step:\n\nSubject: ${safeSubject}\nBody prompt: ${safeBodyPrompt}\n\nMake it more engaging, specific, and action-oriented.`,
         },
       ];
       tools = REFINE_TOOLS;
@@ -107,7 +121,7 @@ serve(async (req) => {
         },
         {
           role: "user",
-          content: `Create a ${stepCount}-step outreach sequence for: ${goal}`,
+          content: `Create a ${stepCount}-step outreach sequence for: ${safeGoal}`,
         },
       ];
       tools = GENERATE_TOOLS;

@@ -6,6 +6,17 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function sanitizeForPrompt(text: string | null | undefined, maxLen = 200): string {
+  if (!text) return "";
+  return text
+    .replace(/ignore\s+(all\s+)?previous\s+instructions?/gi, "[filtered]")
+    .replace(/system\s*:\s*/gi, "[filtered]")
+    .replace(/you\s+are\s+now/gi, "[filtered]")
+    .replace(/disregard\s+(all\s+)?above/gi, "[filtered]")
+    .replace(/forget\s+(all\s+)?prior/gi, "[filtered]")
+    .substring(0, maxLen);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -49,11 +60,16 @@ Deno.serve(async (req) => {
     const pipeline = (userSettings as any)?.discovery_pipeline || "firecrawl";
     console.log(`User ${userId} pipeline: ${pipeline}`);
 
+    // Sanitize user inputs before use in prompts
+    const safeCategory = sanitizeForPrompt(category);
+    const safeLocation = sanitizeForPrompt(location);
+    const safeQuery = sanitizeForPrompt(query, 300);
+
     // Build search terms
     const searchTerms = [];
-    if (category) searchTerms.push(category);
-    if (location) searchTerms.push(location);
-    if (query) searchTerms.push(query);
+    if (safeCategory) searchTerms.push(safeCategory);
+    if (safeLocation) searchTerms.push(safeLocation);
+    if (safeQuery) searchTerms.push(safeQuery);
     searchTerms.push("Kenya small business no website local");
     const searchQuery = searchTerms.join(" ");
 
@@ -147,8 +163,8 @@ Content: ${(r.markdown || "").substring(0, 800)}
 `).join("\n")}
 
 Extract businesses and return them using the extract_businesses function.
-Category should be: ${category || "general"}.
-Location should default to: ${location || "Kenya"}.`
+Category should be: ${safeCategory || "general"}.
+Location should default to: ${safeLocation || "Kenya"}.`
       : `You are a local business researcher specializing in Kenyan small businesses.
 
 Your task: Find REAL small businesses in the category "${category || "general"}" located in "${location || "Kenya"}" that do NOT have their own website.
@@ -163,8 +179,8 @@ IMPORTANT RULES:
 - Do NOT invent email addresses — only include if you're confident it's real.
 
 Extract businesses and return them using the extract_businesses function.
-Category: ${category || "general"}.
-Location: ${location || "Kenya"}.`;
+Category: ${safeCategory || "general"}.
+Location: ${safeLocation || "Kenya"}.`;
 
     const aiResponse = await fetch(aiUrl, {
       method: "POST",
