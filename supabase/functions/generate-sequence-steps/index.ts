@@ -121,7 +121,7 @@ serve(async (req) => {
         },
         {
           role: "user",
-          content: `Create a ${stepCount}-step outreach sequence for: ${goal}`,
+          content: `Create a ${stepCount}-step outreach sequence for: ${safeGoal}`,
         },
       ];
       tools = GENERATE_TOOLS;

@@ -179,8 +179,8 @@ IMPORTANT RULES:
 - Do NOT invent email addresses — only include if you're confident it's real.
 
 Extract businesses and return them using the extract_businesses function.
-Category: ${category || "general"}.
-Location: ${location || "Kenya"}.`;
+Category: ${safeCategory || "general"}.
+Location: ${safeLocation || "Kenya"}.`;
 
     const aiResponse = await fetch(aiUrl, {
       method: "POST",
