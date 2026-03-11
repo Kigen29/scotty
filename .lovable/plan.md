@@ -1,56 +1,43 @@
 
 
-## Plan: Fix Pipeline Routing and Add OpenAI Pipeline Option
+## Deep Project Analysis & Cleanup Plan
 
-### Root Cause
+### WhatsApp Error
+The "Account not registered" error (code 133010) means the recipient's phone number isn't registered on WhatsApp. The `daily-outreach` function should catch this specific error and mark the lead's WhatsApp channel as invalid instead of just logging a generic failure — preventing repeated failed attempts on the same number.
 
-The manual "Discover Leads" button on the Lead Discovery page calls `discover-leads` edge function directly, which **never checks the user's `discovery_pipeline` setting**. It always tries Firecrawl first, regardless of what you chose in Settings. The `auto-discover` function (cron job) does check the setting, but `discover-leads` (manual trigger) does not.
+### Security Findings (2 Critical)
 
-Additionally, `discover-leads/index.ts` has a **duplicate variable declaration** (`FIRECRAWL_API_KEY` on lines 51 and 62) which would cause a runtime error.
+**1. All RLS policies are STILL RESTRICTIVE**
+The previous migration did not fix the issue. All 21 policies across 14 tables remain `RESTRICTIVE` (confirmed by the scanner). This is blocking all data access. A new migration must explicitly drop every policy and recreate them with `AS PERMISSIVE`. The previous migration likely failed silently or used incorrect syntax.
 
----
+**2. Team admin can self-escalate to owner**
+The `team_members` INSERT policy doesn't restrict the `role` value. An admin can insert a duplicate row with `role='owner'`. Fix: add a `UNIQUE(user_id, team_id)` constraint and restrict insertable roles in the policy's `WITH CHECK`.
 
-### Changes
+### Dead Code to Delete
 
-#### 1. Fix `discover-leads` to respect pipeline setting
-
-Rewrite `supabase/functions/discover-leads/index.ts`:
-- Remove the duplicate `FIRECRAWL_API_KEY` declaration
-- After authenticating the user, fetch their `settings` row and read `discovery_pipeline`
-- If `lovable_ai`: skip Firecrawl entirely, use the AI-only prompt (existing fallback path)
-- If `openai`: use the OpenAI API key from secrets with the same discovery prompt
-- If `firecrawl` (default): use current Firecrawl logic with AI fallback
-
-#### 2. Add OpenAI pipeline option
-
-**Database**: Add no schema changes needed -- `discovery_pipeline` is already a `text` column, so it can store `'openai'` as a value.
-
-**New secret**: Use the `add_secret` tool to request the user's OpenAI API key (`OPENAI_API_KEY`).
-
-**Edge functions** -- Update both `discover-leads` and `auto-discover` to handle `pipeline === 'openai'`:
-- Call `https://api.openai.com/v1/chat/completions` directly with the user's OpenAI API key
-- Use `gpt-4o-mini` as the default model (cost-effective for extraction)
-- Same tool-calling schema and prompts as the Lovable AI path, just different endpoint and auth
-
-#### 3. Update Settings UI
-
-Add a third radio option in the Discovery Pipeline card:
-- **Firecrawl** -- Web scraping via Firecrawl API
-- **Lovable AI** -- Uses built-in AI gateway (no extra keys needed)
-- **OpenAI** -- Uses your own OpenAI API key (GPT-4o-mini)
-
-#### 4. Update `auto-discover` routing
-
-Add `openai` case alongside the existing `lovable_ai` case. For OpenAI, run the same logic as `ai-discover` but swap the API endpoint and key.
-
----
-
-### Files to Modify
-
-| File | Change |
+| File | Reason |
 |---|---|
-| `supabase/functions/discover-leads/index.ts` | Fix duplicate var, add pipeline routing (read settings, branch on firecrawl/lovable_ai/openai) |
-| `supabase/functions/auto-discover/index.ts` | Add `openai` pipeline routing case |
-| `supabase/functions/ai-discover/index.ts` | Add optional OpenAI mode (accept `pipeline` param in body) |
-| `src/pages/SettingsPage.tsx` | Add third "OpenAI" radio option with key icon |
+| `src/pages/Index.tsx` | Not imported anywhere. Dashboard is at `/`. |
+| `src/components/NavLink.tsx` | Not imported by any file. |
+
+### Bug: `filterDateRange` missing from useMemo deps
+In `LeadDiscovery.tsx` line 273, `filterDateRange` is used inside `useMemo` but not listed in the dependency array. Date filtering may not re-evaluate when the range changes.
+
+### Bug: Conversations reply uses wrong send-email payload
+In `Conversations.tsx` line 54, `send-email` is invoked with `{ to, subject, body }` but the edge function expects `{ campaign_id }`. The reply-via-email feature is silently broken.
+
+### Improvement Opportunities
+
+1. **WhatsApp error handling** — Detect error code 133010 and mark the lead's phone as invalid to stop retrying
+2. **Conversations reply** — Either create a campaign record first, or add ad-hoc send support to the send-email function
+3. **Reports daily chart** — Currently counts `activity_logs` actions containing "discover" and "email_sent", which may not match actual campaign data. Should use `email_campaigns.sent_at` directly like Dashboard does.
+
+### Implementation Steps
+
+1. **Database migration**: Drop all 21 RESTRICTIVE policies + recreate as PERMISSIVE. Add `UNIQUE(user_id, team_id)` on `team_members`. Update INSERT policy to prevent role escalation.
+2. **Fix WhatsApp error handling** in `daily-outreach/index.ts`: Parse the 133010 error, mark lead phone as invalid, skip future WhatsApp attempts.
+3. **Fix `filterDateRange` dep** in `LeadDiscovery.tsx` useMemo.
+4. **Fix Conversations reply** — create an ad-hoc campaign before invoking send-email.
+5. **Delete dead files**: `src/pages/Index.tsx`, `src/components/NavLink.tsx`.
+6. **Fix Reports chart** to use campaign sent_at instead of activity_logs.
 
