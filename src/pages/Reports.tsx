@@ -63,8 +63,8 @@ const Reports = () => {
     const ds = d.toISOString().split("T")[0];
     return {
       day: d.toLocaleDateString("en", { weekday: "short" }),
-      discovered: activities.filter((a) => a.action?.includes("discover") && a.created_at?.startsWith(ds)).length,
-      sent: activities.filter((a) => a.action?.includes("email_sent") && a.created_at?.startsWith(ds)).length,
+      discovered: leads.filter((l) => l.discovered_at?.startsWith(ds)).length,
+      sent: campaigns.filter((c) => c.sent_at?.startsWith(ds)).length,
     };
   });
 
