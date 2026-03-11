@@ -270,7 +270,7 @@ const LeadDiscovery = () => {
       return 0;
     });
     return result;
-  }, [leads, filterSearch, filterCategory, filterLocation, filterStatus, filterHasEmail, sortKey, sortDir]);
+  }, [leads, filterSearch, filterCategory, filterLocation, filterStatus, filterHasEmail, filterDateRange, sortKey, sortDir]);
 
   const totalPages = Math.ceil(filtered.length / perPage);
   const paged = filtered.slice(page * perPage, (page + 1) * perPage);

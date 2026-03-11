@@ -48,16 +48,25 @@ const Conversations = () => {
       });
       if (error) throw error;
 
-      // Also send via Resend if lead has email
+      // Also send via Resend if lead has email — create a campaign record first
       const lead = grouped[selectedLeadId]?.lead;
       if (lead?.email) {
-        await supabase.functions.invoke("send-email", {
-          body: {
-            to: lead.email,
-            subject: `Re: ${lead.business_name}`,
-            body: replyText.trim(),
-          },
-        });
+        const { data: campaign } = await supabase.from("email_campaigns").insert({
+          user_id: user.id,
+          lead_id: selectedLeadId,
+          subject: `Re: ${lead.business_name}`,
+          body: replyText.trim(),
+          template_type: "reply",
+          status: "draft",
+          channel: "email",
+          source: "manual",
+        }).select("id").single();
+
+        if (campaign) {
+          await supabase.functions.invoke("send-email", {
+            body: { campaign_id: campaign.id },
+          });
+        }
       }
 
       toast({ title: "Reply sent" });

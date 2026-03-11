@@ -352,6 +352,21 @@ ${signature ? `- Signature: ${signature}` : ""}
                   const errBody = await waResponse.text();
                   totalErrors++;
                   errors.push(`WhatsApp failed for ${lead.business_name}: ${errBody}`);
+
+                  // Check for "Account not registered" (133010) — mark phone as invalid
+                  try {
+                    const errJson = JSON.parse(errBody);
+                    if (errJson?.error?.code === 133010) {
+                      // Remove phone and WhatsApp channel to prevent future retries
+                      const existingChannels = (lead as any).contact_channels || [];
+                      const filteredChannels = existingChannels.filter((c: any) => c.type !== "whatsapp");
+                      await supabase.from("leads").update({
+                        phone: null,
+                        contact_channels: filteredChannels,
+                      }).eq("id", lead.id);
+                    }
+                  } catch (_) { /* ignore parse errors */ }
+
                   await supabase.from("activity_logs").insert({
                     user_id: userSettings.user_id,
                     action: "auto_whatsapp_failed",
