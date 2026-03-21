@@ -88,6 +88,23 @@ Deno.serve(async (req) => {
 
     let totalDiscovered = 0;
 
+    // Kenyan neighborhood/area lists for variety
+    const areasByCity: Record<string, string[]> = {
+      "Nairobi": ["Westlands", "Kilimani", "Ngong Road", "Eastleigh", "Gikomba", "Kawangware", "Kibera", "Lang'ata", "Karen", "South B", "South C", "Umoja", "Donholm", "Buruburu", "Pangani", "Parklands", "Lavington", "Hurlingham", "CBD", "River Road", "Tom Mboya St", "Kenyatta Market", "Toi Market", "Githurai", "Kasarani", "Roysambu", "Zimmerman", "Kahawa", "Ruaka", "Rongai", "Kitengela", "Mlolongo", "Athi River", "Embakasi", "Pipeline", "Utawala", "Ruai", "Kangemi", "Mountain View", "Dagoretti"],
+      "Mombasa": ["Nyali", "Bamburi", "Kisauni", "Likoni", "Changamwe", "Majengo", "Old Town", "Ganjoni", "Kizingo", "Tudor", "Mikindani", "Jomvu", "Miritini", "Magongo", "Kongowea", "Bombolulu"],
+      "Kisumu": ["Milimani", "Kondele", "Nyalenda", "Mamboleo", "Kibos", "Lolwe", "Obunga", "Bandani", "Nyamasaria", "Tom Mboya Estate", "Migosi", "Ogango", "Riat"],
+      "Nakuru": ["Milimani", "Section 58", "Shabab", "Kaptembwa", "London", "Freehold", "Lanet", "Bondeni", "Langa Langa", "Whitehouse", "Pipeline", "Flamingo"],
+      "Eldoret": ["Langas", "Huruma", "Kapseret", "Kimumu", "Pioneer", "West Indies", "Elgon View", "Kapsoya", "Annex", "Munyaka", "Kipkaren"],
+    };
+
+    const subCategories: Record<string, string[]> = {
+      "restaurants": ["nyama choma joints", "local cafes", "juice bars", "street food stalls", "fish restaurants", "chapati houses", "roast chicken outlets", "pilau joints", "githeri spots", "fast food kiosks"],
+      "salons": ["barbershops", "beauty parlors", "hair braiding shops", "nail studios", "dreadlock salons", "kids haircut shops", "traditional salons", "spa and beauty centers"],
+      "hardware stores": ["paint shops", "plumbing suppliers", "electrical shops", "timber yards", "glass shops", "welding workshops", "building material stores", "tool shops"],
+      "clinics": ["dental clinics", "pharmacies", "optical shops", "physiotherapy centers", "herbal medicine shops", "veterinary clinics", "lab and diagnostics", "maternity homes"],
+      "retail shops": ["electronics shops", "phone repair shops", "clothing boutiques", "shoe shops", "gift shops", "bookshops", "cosmetics shops", "fabric stores", "auto parts dealers", "stationery shops"],
+    };
+
     for (const userSettings of allSettings) {
       const categories = userSettings.target_categories || [];
       const locations = userSettings.target_locations || [];
@@ -96,12 +113,32 @@ Deno.serve(async (req) => {
       const category = categories[Math.floor(Math.random() * categories.length)];
       const location = locations[Math.floor(Math.random() * locations.length)];
 
+      const subs = subCategories[category] || [];
+      const subCategory = subs.length > 0 ? subs[Math.floor(Math.random() * subs.length)] : category;
+
+      const areas = areasByCity[location] || [];
+      const area = areas.length > 0 ? areas[Math.floor(Math.random() * areas.length)] : "";
+
       const portfolioProjects = userSettings.portfolio_projects || [];
 
-      console.log(`AI discovery for user ${userSettings.user_id}: ${category} in ${location}`);
+      // Fetch existing lead names to avoid duplicates
+      const { data: existingLeads } = await supabase
+        .from("leads")
+        .select("business_name")
+        .eq("user_id", userSettings.user_id)
+        .eq("category", category)
+        .limit(200);
+      const existingNames = (existingLeads || []).map((l: any) => l.business_name);
 
-      // Use Lovable AI as a research agent to find businesses without websites
-      const discoveryPrompt = `You are a local business researcher in Kenya. Your job is to identify REAL small businesses in ${location}, Kenya that operate in the "${category}" category and have NO website.
+      console.log(`AI discovery for user ${userSettings.user_id}: ${subCategory} (${category}) in ${area ? area + ", " : ""}${location} — ${existingNames.length} existing leads to avoid`);
+
+      const areaInstruction = area
+        ? `Focus specifically on the **${area}** area/neighborhood of ${location}.`
+        : `Pick a specific neighborhood or commercial street in ${location} to focus on.`;
+
+      const discoveryPrompt = `You are a local business researcher in Kenya. Your job is to identify REAL small businesses in ${location}, Kenya that are "${subCategory}" (broader category: ${category}) and have NO website.
+
+${areaInstruction}
 
 These businesses typically:
 - Only have a Google Maps / Google Business Profile listing
@@ -110,11 +147,7 @@ These businesses typically:
 - Are small, independently owned shops or service providers
 - Do NOT have a .co.ke, .com, or any custom domain website
 
-Think about the specific streets, neighborhoods, and commercial areas in ${location} where ${category} businesses operate. Consider:
-- Main commercial streets and market areas
-- Shopping centers and malls
-- Residential area commercial strips
-- Industrial areas if relevant
+Think about the specific streets and commercial areas in ${area ? area + ", " + location : location} where ${subCategory} businesses operate.
 
 Generate 5-8 realistic business leads that match this profile. For each business:
 - Use realistic Kenyan business naming conventions (e.g., "[Owner's Name] [Business Type]", "[Location] [Business Type]", etc.)
@@ -123,15 +156,14 @@ Generate 5-8 realistic business leads that match this profile. For each business
 - If you know of actual businesses fitting this profile, include them
 - Only include businesses you're reasonably confident do NOT have a website
 
-**CRITICAL: EMAIL ADDRESSES ARE THE MOST IMPORTANT FIELD.** You MUST try to find or infer email addresses for every business. Check:
-- Google Business Profile listings (many have email)
-- Facebook business pages (often list contact email)
-- Kenya business directories (e.g., Yellow Pages Kenya, Kenya Business Directory)
-- Common patterns: info@businessname.com, businessname@gmail.com, ownername@gmail.com
-- If the business has a Facebook or Instagram page, the contact info often includes email
-- Even if you have to guess a likely Gmail address based on the business name, include it
+${existingNames.length > 0 ? `**CRITICAL: The following businesses are ALREADY in our database. Do NOT include any of them or any variation of their names:**
+${existingNames.slice(0, 100).join(", ")}
 
-Businesses with email addresses are 10x more valuable than those without. Prioritize finding businesses that have publicly listed email addresses.
+Generate COMPLETELY DIFFERENT businesses that are NOT on this list.` : ""}
+
+**CRITICAL: EMAIL ADDRESSES ARE THE MOST IMPORTANT FIELD.** Try to find or infer email addresses for every business.
+
+Businesses with email addresses are 10x more valuable. Prioritize finding businesses that have publicly listed email addresses.
 
 IMPORTANT: Do NOT invent businesses that are likely to have websites. Skip chains, franchises, and large establishments.`;
 
