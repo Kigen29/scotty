@@ -142,6 +142,10 @@ a job never means editing the ruleset.
 Validates `github.head_ref` against the prefix list. The error message includes
 the rename commands.
 
+Branches beginning `dependabot/` or `changeset-release/` are exempt — bots name
+their own branches, and holding them to our convention only produces a red check
+nobody can fix.
+
 ### `pr-title`
 
 Conventional commit format, subject under 100 characters, no trailing period.
@@ -266,6 +270,22 @@ arrive as one PR rather than thirty. Groups: `radix`, `react`, `tooling`,
 
 Majors for `vite`, `react`, `react-dom` and `tailwindcss` are ignored on
 purpose — those land deliberately, with the app exercised by hand.
+
+Action updates are grouped into a single PR. The first Dependabot run opened
+five separate PRs for five action majors; one grouped PR is one review.
+
+**Dependabot PRs cannot read repository secrets.** GitHub scopes them to a
+separate Dependabot secret store, so `CI_POSTGRES_PASSWORD` has to exist in
+both:
+
+```sh
+gh secret set CI_POSTGRES_PASSWORD                  # normal runs
+gh secret set CI_POSTGRES_PASSWORD --app dependabot # Dependabot PRs
+```
+
+Without the second, every Dependabot PR fails the `Migrations` job on the
+fail-fast secret check — which is the check doing its job, but the cause is not
+obvious from the message alone.
 
 ## Things CI does not do yet
 
