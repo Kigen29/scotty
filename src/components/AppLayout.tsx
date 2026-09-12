@@ -57,7 +57,7 @@ const AppLayout = () => {
     if (isMobile) setSidebarOpen(false);
   };
 
-  const pageTitle = pageTitles[location.pathname] || "ScoutAgent";
+  const pageTitle = pageTitles[location.pathname] || "Scotty";
 
   return (
     <div className="flex h-screen bg-background">
@@ -79,7 +79,7 @@ const AppLayout = () => {
               <Zap className="h-4 w-4 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-bold text-sidebar-foreground text-sm leading-tight">ScoutAgent</h1>
+              <h1 className="font-bold text-sidebar-foreground text-sm leading-tight">Scotty</h1>
               <p className="text-[10px] text-sidebar-foreground/50">Lead Autopilot</p>
             </div>
           </div>

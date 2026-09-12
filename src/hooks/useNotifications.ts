@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
-const LAST_SEEN_KEY = "scoutagent_last_seen_notifications";
-const LAST_SEEN_ACTIVITY_KEY = "scoutagent_last_seen_activity";
-const LAST_SEEN_ASSIGNMENTS_KEY = "scoutagent_last_seen_assignments";
+const LAST_SEEN_KEY = "scotty_last_seen_notifications";
+const LAST_SEEN_ACTIVITY_KEY = "scotty_last_seen_activity";
+const LAST_SEEN_ASSIGNMENTS_KEY = "scotty_last_seen_assignments";
 
 export interface NotificationItem {
   id: string;
