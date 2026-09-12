@@ -1,0 +1,180 @@
+name: PR hygiene
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+    branches: [main]
+
+concurrency:
+  group: hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  branch-name:
+    name: Branch name
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate branch prefix
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          echo "Branch: $BRANCH"
+          PATTERN='^(feat|fix|docs|chore|refactor|test|ci|perf|security|revert|release)/[a-z0-9][a-z0-9._-]*$'
+          if [[ "$BRANCH" =~ $PATTERN ]]; then
+            echo "✓ Branch name is valid."
+            exit 0
+          fi
+          cat <<'MSG'
+          ::error::Branch name does not follow the convention.
+
+          Expected:  <type>/<short-kebab-description>
+
+          Types:
+            feat/       new capability            feat/inbound-email-ingest
+            fix/        bug fix                   fix/auto-discover-sanitizer
+            docs/       documentation only        docs/contributing-guide
+            chore/      deps, config, renames     chore/rebrand-to-scotty
+            refactor/   no behaviour change       refactor/shared-send-gate
+            test/       tests only                test/send-policy-units
+            ci/         pipelines and tooling     ci/github-actions
+            perf/       performance               perf/lead-query-indexes
+            security/   hardening                 security/suppression-table
+            revert/     reverting a change        revert/ai-discover-removal
+
+          Rename with:
+            git branch -m <new-name>
+            git push origin :<old-name> <new-name>
+            git push origin -u <new-name>
+          MSG
+          exit 1
+
+  pr-title:
+    name: PR title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate conventional commit title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "Title: $TITLE"
+          # type(optional-scope)!: subject
+          PATTERN='^(feat|fix|docs|chore|refactor|test|ci|perf|security|revert)(\([a-z0-9._/-]+\))?!?: .{1,}$'
+          if [[ ! "$TITLE" =~ $PATTERN ]]; then
+            echo "::error::PR title must be a conventional commit, e.g. 'fix(discovery): define sanitizeForPrompt in auto-discover'"
+            echo "Got: $TITLE"
+            exit 1
+          fi
+          SUBJECT="${TITLE#*: }"
+          if [ "${#SUBJECT}" -gt 100 ]; then
+            echo "::error::Subject is ${#SUBJECT} chars; keep it under 100."
+            exit 1
+          fi
+          case "$SUBJECT" in
+            *.) echo "::error::Subject should not end with a period."; exit 1 ;;
+          esac
+          echo "✓ Title is valid."
+
+  changeset:
+    name: Changeset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require a changeset for behaviour changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          if echo "$LABELS" | grep -q '"no-changeset"'; then
+            echo "✓ Skipped — PR carries the 'no-changeset' label."
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD")
+          echo "Changed files:"; echo "$CHANGED" | sed 's/^/  /'
+
+          # Only shipped behaviour needs a release note.
+          if ! echo "$CHANGED" | grep -qE '^(src/|supabase/|package\.json$)'; then
+            echo "✓ Skipped — no changes under src/, supabase/, or package.json."
+            exit 0
+          fi
+
+          if echo "$CHANGED" | grep -qE '^\.changeset/.+\.md$'; then
+            echo "✓ Changeset present."
+            exit 0
+          fi
+
+          cat <<'MSG'
+          ::error::This PR changes shipped behaviour but has no changeset.
+
+          Add one:
+            npm run changeset
+
+          Then commit the generated file in .changeset/.
+
+          If the change genuinely ships nothing (a comment, a test rename),
+          add the 'no-changeset' label to this PR instead.
+
+          Why: the changelog is the first thing you read when the agent
+          misbehaves in production and you need to know what changed.
+          MSG
+          exit 1
+
+  no-secrets-in-diff:
+    name: No secrets in diff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan the diff for credential-shaped strings
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Added lines only — existing files are covered by the scheduled
+          # full-history scan in security.yml.
+          ADDED=$(git diff --unified=0 "$BASE" "$HEAD" | grep '^+' | grep -v '^+++' || true)
+
+          fail=0
+          # `--` terminates option parsing: the private-key pattern starts with
+          # a dash, and without it grep treats the pattern as a flag, errors
+          # out, and the check silently never runs.
+          check() {
+            if echo "$ADDED" | grep -qiE -- "$1"; then
+              echo "::error::Possible $2 added in this PR."
+              echo "$ADDED" | grep -inE -- "$1" | head -5 | sed 's/^/    /'
+              fail=1
+            fi
+          }
+
+          # Patterns match credential VALUES, not variable names. Deliberately
+          # no bare `service_role` check: every edge function legitimately reads
+          # Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), so that would fail on
+          # 11 files. What matters is a key being assigned inline.
+          check 're_[A-Za-z0-9]{20,}'                'Resend API key'
+          check 'fc-[A-Za-z0-9]{20,}'                'Firecrawl API key'
+          check 'sk-[A-Za-z0-9_-]{20,}'              'OpenAI API key'
+          check 'sk_live_[A-Za-z0-9]{10,}'           'live secret key'
+          check 'EAA[A-Za-z0-9]{40,}'                'Meta/WhatsApp access token'
+          check '-----BEGIN [A-Z ]*PRIVATE KEY-----' 'private key'
+          # A secret name followed by an inline literal rather than env lookup.
+          check '(SERVICE_ROLE_KEY|API_KEY|APP_SECRET|WEBHOOK_SECRET|TOKEN)[[:space:]]*[:=][[:space:]]*["'"'"'][A-Za-z0-9_-]{16,}' \
+                'secret assigned inline instead of read from env'
+
+          if [ "$fail" -eq 1 ]; then
+            echo ""
+            echo "Secrets belong in Supabase Edge Function secrets, never in the repo."
+            echo "If this is a false positive (a variable name, a doc example),"
+            echo "reword it or narrow the pattern in .github/workflows/pr-hygiene.yml."
+            exit 1
+          fi
+          echo "✓ No credential-shaped strings in the diff."

@@ -1,0 +1,24 @@
+name: Setup
+description: Check out deps-ready Node environment for Scotty (Node + npm cache + npm ci)
+
+inputs:
+  node-version:
+    description: Node version to install
+    required: false
+    default: "20"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node ${{ inputs.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+
+    # `npm ci` is fast here because setup-node caches the npm download cache
+    # keyed on package-lock.json. Caching node_modules itself is skipped
+    # deliberately — it breaks whenever a native dep or Node version changes.
+    - name: Install dependencies
+      shell: bash
+      run: npm ci --no-audit --no-fund

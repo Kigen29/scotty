@@ -78,7 +78,9 @@ Deno.serve(async (req) => {
       const services = userSettings.services?.join(", ") || "web development and digital solutions";
       const signature = userSettings.email_signature || "Best regards,\nEmmanuel Kigen";
       const portfolio = userSettings.portfolio_links?.join(", ") || "";
-      const portfolioProjects = (userSettings as any).portfolio_projects || [];
+      // NOTE: settings.portfolio_projects is deliberately not read here — the
+      // outreach prompts below only use portfolio_links. Wiring richer portfolio
+      // matching into this path is part of Phase 3 (unify scoring/personalisation).
 
       // Determine sending capability
       const canAutoSend = RESEND_API_KEY && senderEmail && !isFreeEmail(senderEmail);

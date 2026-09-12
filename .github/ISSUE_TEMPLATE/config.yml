@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Architecture review and plan
+    url: https://claude.ai/code/artifact/9a4924a6-ecac-4d60-bc63-c270955800dc
+    about: Current findings and the six-phase plan. Check here before filing.

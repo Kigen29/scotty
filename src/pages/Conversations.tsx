@@ -79,7 +79,7 @@ const Conversations = () => {
     }
   };
 
-  const useSuggestedReply = (text: string) => {
+  const applySuggestedReply = (text: string) => {
     setReplyText(text);
   };
 
@@ -175,7 +175,7 @@ const Conversations = () => {
                           size="sm"
                           variant="ghost"
                           className="h-7 text-xs"
-                          onClick={() => useSuggestedReply(
+                          onClick={() => applySuggestedReply(
                             activeThread.messages.find((m) => m.ai_suggested_reply)?.ai_suggested_reply || ""
                           )}
                         >

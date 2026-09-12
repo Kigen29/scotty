@@ -80,7 +80,6 @@ Deno.serve(async (req) => {
 
     const bookingLink = (settings as any)?.booking_link || "";
 
-    const senderName = settings?.company_name || "Emmanuel Kigen";
     const services = settings?.services?.join(", ") || "web development, mobile apps, and digital solutions";
     const portfolio = settings?.portfolio_links?.join(", ") || "";
     const signature = settings?.email_signature || `Best regards,\nEmmanuel Kigen`;

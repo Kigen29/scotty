@@ -1,0 +1,336 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push to the same ref makes the in-flight run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Static analysis
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: ESLint — errors fail the build
+        run: npm run lint
+
+      - name: Lint debt ratchet — warnings may not increase
+        run: npm run lint:budget
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: tsc --noEmit
+        run: npm run typecheck
+
+  # ---------------------------------------------------------------------------
+  # Tests. `test` blocks; the health report tells you how much the suite
+  # actually proves — which today is very little. See docs/ci.md.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Vitest with coverage
+        run: npm run test:coverage
+
+      - name: Test health report
+        if: always()
+        run: npm run test:health
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Production build, plus a look at what it weighs.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Vite build
+        run: npm run build
+
+      - name: Report bundle size
+        run: |
+          {
+            echo "## Bundle"
+            echo
+            echo "| File | Size |"
+            echo "| --- | --- |"
+            find dist/assets -type f \( -name '*.js' -o -name '*.css' \) -print0 \
+              | xargs -0 du -h \
+              | sort -rh \
+              | awk '{printf "| `%s` | %s |\n", $2, $1}'
+            echo
+            echo "Total: \`$(du -sh dist | cut -f1)\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Edge functions are Deno, not Node — eslint alone cannot catch a missing
+  # import or an undefined identifier in them. `deno check` can, and does:
+  # this job is what catches bugs like `sanitizeForPrompt` being called in a
+  # function that never defines it.
+  # ---------------------------------------------------------------------------
+  edge-functions:
+    name: Edge functions (Deno)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned rather than v2.x: Deno adds lint rules in minor releases, and an
+      # unpinned runner started failing all 18 functions on `no-import-prefix`
+      # for using Supabase's own documented import style.
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.4.1"
+
+      # Run from the functions directory so supabase/functions/deno.json is
+      # picked up — it maps the `npm:` specifiers these functions import.
+      - name: deno lint
+        working-directory: supabase/functions
+        run: deno lint
+
+      - name: deno check — type-check every function entrypoint
+        working-directory: supabase/functions
+        run: |
+          status=0
+          for fn in */index.ts; do
+            echo "::group::$fn"
+            if ! deno check --allow-import "$fn"; then
+              echo "::error file=supabase/functions/$fn::deno check failed"
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $status
+
+      # Advisory only. `deno fmt` would reformat all 18 functions in one
+      # commit, which would bury the Phase 1 refactor in whitespace. Turn this
+      # blocking once the functions have been reformatted deliberately.
+      - name: deno fmt --check (advisory)
+        working-directory: supabase/functions
+        continue-on-error: true
+        run: deno fmt --check
+
+  # ---------------------------------------------------------------------------
+  # Migrations must apply cleanly to an empty database, in order. Catches a
+  # migration that depends on something a later file creates.
+  # ---------------------------------------------------------------------------
+  migrations:
+    name: Migrations
+    runs-on: ubuntu-latest
+    services:
+      # Supabase's own Postgres image, not plain postgres:15 — it ships pg_cron,
+      # pg_net, pgcrypto and the anon/authenticated/service_role roles that the
+      # migrations reference. A bare image fails on all of them, which says
+      # nothing about whether our SQL is correct.
+      postgres:
+        image: supabase/postgres:15.14.1.171
+        env:
+          # Read from an Actions secret, never written in this file.
+          #
+          # Two simpler options were tried and do not work here:
+          #   - a literal `postgres` — correctly flagged by secret scanning
+          #   - POSTGRES_HOST_AUTH_METHOD=trust — ignored, because
+          #     supabase/postgres ships its own pg_hba.conf requiring a
+          #     password, so psql still fails with "password authentication
+          #     failed"
+          #
+          # The value is throwaway: this database is created fresh inside the
+          # runner, listens only on localhost, and dies with the job. Actions
+          # encrypts it at rest and masks it in logs, so nothing lands in git.
+          # Rotate with: gh secret set CI_POSTGRES_PASSWORD
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+      # pg_cron can only be installed into the database named by
+      # cron.database_name, which defaults to `postgres`.
+      PGDATABASE: postgres
+      PGHOST: localhost
+      PGUSER: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the CI database secret is set
+        run: |
+          if [ -z "$PGPASSWORD" ]; then
+            echo "::error::CI_POSTGRES_PASSWORD is not set for this repository."
+            echo "Create it with:  gh secret set CI_POSTGRES_PASSWORD"
+            echo "Any random value works — the database is ephemeral."
+            exit 1
+          fi
+          echo "Secret is present."
+
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -q && exit 0
+            sleep 2
+          done
+          echo "::error::Postgres never became ready"; exit 1
+
+      - name: Preflight — stub only what the image lacks
+        run: |
+          # Best-effort by design. supabase/postgres already provides the auth
+          # and extensions schemas, pgcrypto, the Supabase roles and (usually)
+          # auth.users. It also does NOT make `postgres` a superuser, so writes
+          # into the auth schema are refused — hence every stub is guarded and
+          # swallows insufficient_privilege. The migrations themselves are the
+          # actual test; this step must never be what fails the job.
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          DECLARE r text;
+          BEGIN
+            FOREACH r IN ARRAY ARRAY['anon','authenticated','service_role','authenticator','supabase_admin']
+            LOOP
+              IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+                BEGIN
+                  EXECUTE format('CREATE ROLE %I NOLOGIN', r);
+                  RAISE NOTICE 'created role %', r;
+                EXCEPTION WHEN insufficient_privilege THEN
+                  RAISE NOTICE 'cannot create role % (not superuser)', r;
+                END;
+              END IF;
+            END LOOP;
+          END $$;
+
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='auth' AND tablename='users') THEN
+              BEGIN
+                CREATE TABLE auth.users (id uuid PRIMARY KEY, email text);
+                RAISE NOTICE 'stubbed auth.users';
+              EXCEPTION WHEN insufficient_privilege OR invalid_schema_name THEN
+                RAISE NOTICE 'auth.users absent and not creatable; a migration may reveal it';
+              END;
+            END IF;
+          END $$;
+
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname='auth' AND p.proname='uid'
+            ) THEN
+              BEGIN
+                EXECUTE $f$CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULL::uuid'$f$;
+                RAISE NOTICE 'stubbed auth.uid()';
+              EXCEPTION WHEN insufficient_privilege OR invalid_schema_name THEN
+                RAISE NOTICE 'auth.uid() absent and not creatable';
+              END;
+            END IF;
+          END $$;
+
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname='supabase_realtime') THEN
+              BEGIN
+                CREATE PUBLICATION supabase_realtime;
+                RAISE NOTICE 'created publication supabase_realtime';
+              EXCEPTION WHEN insufficient_privilege THEN
+                RAISE NOTICE 'cannot create publication supabase_realtime';
+              END;
+            END IF;
+          END $$;
+          SQL
+
+      - name: Report what the environment provides
+        run: |
+          psql -c "SELECT rolname FROM pg_roles WHERE rolname IN ('anon','authenticated','service_role','supabase_admin') ORDER BY 1"
+          psql -c "SELECT extname FROM pg_extension ORDER BY 1"
+          psql -c "SELECT pubname FROM pg_publication ORDER BY 1"
+          psql -c "SELECT n.nspname||'.'||p.proname AS fn FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='auth' AND p.proname IN ('uid','role','jwt') ORDER BY 1"
+
+      - name: Apply migrations in order
+        run: |
+          status=0
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            echo "::group::$(basename "$f")"
+            if ! psql -v ON_ERROR_STOP=1 -f "$f"; then
+              echo "::error file=$f::migration failed to apply"
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $status
+
+      - name: Report schema
+        if: always()
+        run: |
+          {
+            echo "## Schema after migrations"
+            echo
+            echo '```'
+            psql -c "\dt public.*" || true
+            echo '```'
+            echo "### Indexes on public tables"
+            echo '```'
+            psql -c "SELECT tablename, indexname FROM pg_indexes WHERE schemaname='public' ORDER BY tablename, indexname" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # One required check for branch protection to point at, so adding a job
+  # later does not mean reconfiguring the ruleset.
+  # ---------------------------------------------------------------------------
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [lint, typecheck, test, build, edge-functions, migrations]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required job failed
+        run: |
+          results='${{ join(needs.*.result, ' ') }}'
+          echo "Job results: $results"
+          for r in $results; do
+            if [ "$r" != "success" ]; then
+              echo "::error::A required CI job did not succeed ($results)"
+              exit 1
+            fi
+          done
+          echo "All required jobs passed."

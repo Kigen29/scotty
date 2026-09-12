@@ -1,0 +1,67 @@
+name: Bug report
+description: Something in Scotty behaves wrongly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If this is about **outbound messages reaching the wrong people**, or
+        **fabricated leads**, say so in the title and pause the cron jobs first.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Discovery (finding businesses)
+        - Qualification (scoring, email verification, enrichment)
+        - Composing (draft copy)
+        - Sending (email / WhatsApp)
+        - Inbound (replies, webhooks, classification)
+        - Sequences
+        - Dashboard / Reports
+        - Auth / teams
+        - Build, CI, tooling
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      placeholder: |
+        1. Go to /discovery
+        2. Click "Discover Leads"
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: blast
+    attributes:
+      label: Did anything go out?
+      description: Messages sent, leads written, money spent. "No" is a fine answer.
+      placeholder: e.g. 12 emails sent to unverified addresses before I noticed
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Browser console, or the Supabase edge function logs. Redact keys.
+      render: shell
