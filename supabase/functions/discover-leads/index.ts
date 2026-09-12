@@ -76,8 +76,11 @@ Deno.serve(async (req) => {
     let results: any[] = [];
     let usedFirecrawl = false;
 
-    // ── FIRECRAWL PIPELINE ──
-    if (pipeline === "firecrawl") {
+    // ── SEARCH ──
+    // Always runs. `discovery_pipeline` now selects only which model reads the
+    // results; it can no longer select a path that skips searching, because
+    // the only such path was the generative one.
+    {
       const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
       if (FIRECRAWL_API_KEY) {
         try {
@@ -113,7 +116,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Determine AI endpoint + key based on pipeline
+    // No search results means nothing to extract from. Previously this fell
+    // through to a prompt that asked the model to "include 5-8 realistic
+    // businesses" — i.e. to invent them, complete with +254 phone numbers.
+    // Discovery now fails loudly rather than fabricating.
+    if (!usedFirecrawl || results.length === 0) {
+      const reason = !usedFirecrawl
+        ? "Web search is unavailable — FIRECRAWL_API_KEY is not configured, or the search request failed."
+        : "Web search returned no results for that category and location.";
+      console.warn(`discover-leads: no results (${reason})`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          leads_added: 0,
+          results_found: 0,
+          error: reason,
+          hint: "Try a broader category or a larger town. Leads are only created from real search results.",
+        }),
+        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Extraction model. Only ever used to read search results we already have.
     let aiUrl: string;
     let aiKey: string;
     let aiModel: string;
@@ -136,8 +160,7 @@ Deno.serve(async (req) => {
     }
 
     // Build extraction prompt
-    const extractionPrompt = usedFirecrawl
-      ? `You are analyzing web search results to extract Kenyan business leads.
+    const extractionPrompt = `You are analyzing web search results to extract Kenyan business leads.
 
 CRITICAL RULES FOR has_website:
 - ONLY set has_website to false if the business has ZERO web presence of its own.
@@ -164,23 +187,8 @@ Content: ${(r.markdown || "").substring(0, 800)}
 
 Extract businesses and return them using the extract_businesses function.
 Category should be: ${safeCategory || "general"}.
-Location should default to: ${safeLocation || "Kenya"}.`
-      : `You are a local business researcher specializing in Kenyan small businesses.
+Location should default to: ${safeLocation || "Kenya"}.`;
 
-Your task: Find REAL small businesses in the category "${category || "general"}" located in "${location || "Kenya"}" that do NOT have their own website.
-
-IMPORTANT RULES:
-- Focus on REAL businesses that exist in Kenya.
-- Prioritize businesses you'd find on Google Maps listings, Facebook pages, or local directories but that have NO website.
-- EVERY business MUST have either a phone number or email. Prefer businesses with email addresses.
-- For phone numbers, use Kenyan format (+254...).
-- Set has_website to false for all results.
-- Include 5-8 realistic businesses.
-- Do NOT invent email addresses — only include if you're confident it's real.
-
-Extract businesses and return them using the extract_businesses function.
-Category: ${safeCategory || "general"}.
-Location: ${safeLocation || "Kenya"}.`;
 
     const aiResponse = await fetch(aiUrl, {
       method: "POST",
@@ -275,7 +283,9 @@ Location: ${safeLocation || "Kenya"}.`;
           has_website: biz.has_website ?? false,
           notes: biz.notes || null,
           status: "discovered",
-          discovery_source: pipeline === "firecrawl" && usedFirecrawl ? "web" : "ai_search",
+          // Always "web": the function now returns early unless Firecrawl
+          // produced results, so every lead here came from a real search hit.
+          discovery_source: "web",
         });
 
         if (!insertError) leadsAdded++;

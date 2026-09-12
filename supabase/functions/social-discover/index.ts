@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
         let results: any[] = [];
 
         // Only use Firecrawl for search if available and pipeline is firecrawl
-        if (FIRECRAWL_API_KEY && pipeline === "firecrawl") {
+        if (FIRECRAWL_API_KEY) {
           const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
             method: "POST",
             headers: {
@@ -157,9 +157,16 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Build prompt — either from search results or pure AI research
-        const extractionPrompt = results.length > 0
-          ? `You are extracting Kenyan business leads from ${platform.name} pages.
+        // Nothing to extract from. This used to fall through to a prompt that
+        // asked for "5-8 realistic businesses" with +254 numbers — invented
+        // leads, stored under discovery_source "instagram"/"tiktok" and so
+        // indistinguishable from real ones. Skip the platform instead.
+        if (results.length === 0) {
+          console.warn(`social-discover: no ${platform.name} search results for ${category} in ${location} — skipping (no generative fallback)`);
+          continue;
+        }
+
+        const extractionPrompt = `You are extracting Kenyan business leads from ${platform.name} pages.
 
 STRICT RULES — NO EXCEPTIONS:
 1. ONLY extract businesses that have NO separate website of their own
@@ -176,19 +183,8 @@ Description: ${r.description || ""}
 Content: ${(r.markdown || "").substring(0, 600)}
 `).join("\n")}
 
-Target category: ${category}. Target location: ${location}, Kenya.`
-          : `You are a social media business researcher.
+Target category: ${category}. Target location: ${location}, Kenya.`;
 
-Find REAL ${category} businesses on ${platform.name} in ${location}, Kenya that do NOT have a website.
-These businesses use ${platform.name} as their primary online presence.
-
-Return 5-8 realistic businesses with:
-- Business name, handle, category, location
-- Phone/WhatsApp numbers (Kenyan format +254...)
-- Email if available
-- has_website: false for all
-
-Only include businesses you believe actually exist.`;
 
         const aiResponse = await fetch(aiUrl, {
           method: "POST",

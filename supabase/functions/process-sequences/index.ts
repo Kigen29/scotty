@@ -116,6 +116,13 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      // Never advance a sequence for a lead we cannot vouch for.
+      if (lead.verification_state !== "verified") {
+        await supabase.from("sequence_enrollments").update({ status: "paused" }).eq("id", enrollment.id);
+        console.warn(`Paused enrollment ${enrollment.id}: lead ${lead.id} is ${lead.verification_state}`);
+        continue;
+      }
+
       // Check if lead unsubscribed
       if (lead.unsubscribed) {
         await supabase.from("sequence_enrollments").update({ status: "paused" }).eq("id", enrollment.id);

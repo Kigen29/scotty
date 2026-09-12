@@ -104,6 +104,8 @@ Deno.serve(async (req) => {
         const lead = (campaign as any).leads;
         if (!lead?.email) continue;
         if (lead?.unsubscribed) continue; // Skip unsubscribed leads
+        // Never send a draft addressed to a lead we cannot vouch for.
+        if (lead?.verification_state !== "verified") continue;
 
         try {
           const bodyWithFooter = campaign.body + "\n\n---\nReply STOP to unsubscribe.";
@@ -142,6 +144,7 @@ Deno.serve(async (req) => {
 
       for (const lead of contactedLeads || []) {
         if ((lead as any).unsubscribed) continue; // Skip unsubscribed leads
+        if ((lead as any).verification_state !== "verified") continue;
         // Get existing campaigns for this lead
         const { data: existingCampaigns } = await supabase
           .from("email_campaigns")
