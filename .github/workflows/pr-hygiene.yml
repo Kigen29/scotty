@@ -23,6 +23,17 @@ jobs:
           BRANCH: ${{ github.head_ref }}
         run: |
           echo "Branch: $BRANCH"
+
+          # Bots name their own branches and we do not get a say. Dependabot
+          # uses dependabot/<ecosystem>/<dep>-<version>; the changesets action
+          # uses changeset-release/<base>. Holding them to our convention only
+          # produces a red check nobody can fix.
+          case "$BRANCH" in
+            dependabot/*|changeset-release/*)
+              echo "✓ Bot-generated branch — convention does not apply."
+              exit 0 ;;
+          esac
+
           PATTERN='^(feat|fix|docs|chore|refactor|test|ci|perf|security|revert|release)/[a-z0-9][a-z0-9._-]*$'
           if [[ "$BRANCH" =~ $PATTERN ]]; then
             echo "✓ Branch name is valid."

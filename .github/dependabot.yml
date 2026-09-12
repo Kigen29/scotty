@@ -48,6 +48,13 @@ updates:
     directory: "/"
     schedule:
       interval: monthly
+    open-pull-requests-limit: 3
     commit-message:
       prefix: "ci"
     labels: ["dependencies", "no-changeset"]
+    groups:
+      # One PR for all action updates rather than one per action. The first
+      # run opened five separate PRs for five action majors, each of which
+      # would have had to be reviewed and merged on its own.
+      github-actions:
+        patterns: ["*"]
