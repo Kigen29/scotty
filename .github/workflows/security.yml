@@ -36,7 +36,7 @@ jobs:
       # anon key in .env allowlisted by exact value (it is public by design and
       # ships in the JS bundle anyway). A real secret in that same file is
       # still caught.
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
