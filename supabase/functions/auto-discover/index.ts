@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // Strips the most common prompt-injection preambles out of scraped, untrusted
-// text before it reaches a model. Matches the implementation in ai-discover.
+// text before it reaches a model.
 // NOTE: this is a regex blocklist, not real isolation — it is trivially
 // bypassed by paraphrase or another language. Phase 1 of the architecture plan
 // moves this into supabase/functions/_shared/ so there is one copy, and Phase 5
@@ -74,29 +74,16 @@ Deno.serve(async (req) => {
     let totalDiscovered = 0;
 
     for (const userSettings of allSettings) {
-      // Pipeline routing: check if user wants AI discovery instead of Firecrawl
-      const pipeline = (userSettings as any).discovery_pipeline || "firecrawl";
-      if (pipeline === "lovable_ai" || pipeline === "openai") {
-        console.log(`User ${userSettings.user_id} uses ${pipeline} pipeline — delegating to ai-discover`);
-        try {
-          const aiDiscoverUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ai-discover`;
-          await fetch(aiDiscoverUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-            },
-            body: JSON.stringify({ pipeline }),
-          });
-        } catch (e) {
-          console.error("Failed to call ai-discover:", e);
-        }
-        continue;
-      }
-
-      // Firecrawl pipeline requires API key
+      // Discovery must start from a real search result. The `lovable_ai` and
+      // `openai` pipelines used to delegate to ai-discover, which asked a model
+      // to invent businesses — names, +254 numbers, inferred email addresses —
+      // and wrote them straight into `leads` as qualified. That function is
+      // gone; there is no longer a pipeline that originates contact details.
+      //
+      // Without Firecrawl there is nothing to extract from, so we skip rather
+      // than fall back to anything generative.
       if (!FIRECRAWL_API_KEY) {
-        console.error("FIRECRAWL_API_KEY not configured, skipping Firecrawl pipeline");
+        console.error("FIRECRAWL_API_KEY not configured — skipping discovery for this user");
         continue;
       }
       const categories = userSettings.target_categories || [];

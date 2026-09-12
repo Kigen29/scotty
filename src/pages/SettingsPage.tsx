@@ -227,23 +227,23 @@ const SettingsPage = () => {
         <TabsContent value="discovery" className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2"><Cpu className="h-4 w-4" /> Discovery Pipeline</CardTitle>
-              <CardDescription className="text-xs">Choose which engine discovers new leads</CardDescription>
+              <CardTitle className="text-base flex items-center gap-2"><Cpu className="h-4 w-4" /> Extraction Model</CardTitle>
+              <CardDescription className="text-xs">Leads always come from a web search. This chooses which model reads the results.</CardDescription>
             </CardHeader>
             <CardContent>
               <RadioGroup value={settings.discovery_pipeline} onValueChange={(v) => setSettings((s) => ({ ...s, discovery_pipeline: v }))} className="space-y-2">
                 <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${settings.discovery_pipeline === "firecrawl" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
                   <RadioGroupItem value="firecrawl" className="mt-0.5" />
                   <div className="flex-1">
-                    <div className="flex items-center gap-2"><Search className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-sm font-medium">Firecrawl</span></div>
-                    <p className="text-xs text-muted-foreground mt-0.5">Web scraping — searches Google, scrapes results.</p>
+                    <div className="flex items-center gap-2"><Search className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-sm font-medium">Built-in (default)</span></div>
+                    <p className="text-xs text-muted-foreground mt-0.5">Firecrawl searches the web; the built-in model extracts businesses from the results.</p>
                   </div>
                 </label>
                 <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${settings.discovery_pipeline === "lovable_ai" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
                   <RadioGroupItem value="lovable_ai" className="mt-0.5" />
                   <div className="flex-1">
                     <div className="flex items-center gap-2"><Cpu className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-sm font-medium">Built-in AI</span></div>
-                    <p className="text-xs text-muted-foreground mt-0.5">AI research agent — identifies businesses via local knowledge.</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Same search, built-in model. Kept for existing settings — identical to the default.</p>
                   </div>
                 </label>
                 <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${settings.discovery_pipeline === "openai" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
