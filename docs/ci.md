@@ -268,8 +268,27 @@ Mondays 06:00 Africa/Nairobi, max 5 open PRs, grouped so ~30 Radix packages
 arrive as one PR rather than thirty. Groups: `radix`, `react`, `tooling`,
 `supabase`. Labelled `dependencies` and `no-changeset`.
 
-Majors for `vite`, `react`, `react-dom` and `tailwindcss` are ignored on
-purpose — those land deliberately, with the app exercised by hand.
+**All npm majors are ignored on purpose.** Dependabot handles patches and
+minors; majors land deliberately, on a branch named for the package, with the
+app exercised by hand.
+
+The narrower rule this replaces covered only `vite`, `react`, `react-dom` and
+`tailwindcss` — so the first run proposed one PR bumping `typescript` 5 → 7,
+`eslint` 9 → 10, `vitest` 3 → 5, `eslint-plugin-react-hooks` 5 → 7 and
+`@vitejs/plugin-react-swc` 3 → 4 together. It failed Build, Lint, Test and
+Typecheck, and five simultaneous tool majors is not reviewable as one change.
+
+To take a major:
+
+```sh
+git switch -c chore/typescript-7
+npm i typescript@latest
+npm run verify          # and exercise the app
+```
+
+Action majors are *not* ignored — they are grouped into a single PR, and
+`gitleaks-action` in particular needs a full-history scan after any bump, since
+a PR-scoped scan cannot prove the allowlist still parses.
 
 Action updates are grouped into a single PR. The first Dependabot run opened
 five separate PRs for five action majors; one grouped PR is one review.
