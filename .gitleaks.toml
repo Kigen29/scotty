@@ -23,7 +23,11 @@ title = "Scotty"
 [extend]
 useDefault = true
 
-[[allowlists]]
+# Singular [allowlist], not [[allowlists]]. The plural array form needs
+# gitleaks >= 8.21, and gitleaks-action@v2 pins an older build — on which the
+# plural form is silently ignored, the allowlist never applies, and the scan
+# fails on the anon key. The singular form is honoured by both.
+[allowlist]
 description = "Supabase anon/publishable key — public by design, see notes above"
 regexTarget = "match"
 regexes = [
