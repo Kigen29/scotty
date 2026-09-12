@@ -176,7 +176,20 @@ Full history is covered by gitleaks in the security workflow.
 
 ### `secret-scan`
 
-gitleaks over the full history, not just the diff. Configured by
+gitleaks over the full history, not just the diff.
+
+> The allowlist uses the **singular `[allowlist]`** table, not `[[allowlists]]`.
+> The plural array form requires gitleaks >= 8.21, and `gitleaks-action@v2`
+> pins an older build on which it is silently ignored — the allowlist never
+> applies and the scan fails on the anon key. Local development uses a newer
+> gitleaks, which honours both, so this only shows up in CI. Keep the config
+> compatible with the older parser.
+>
+> Note also that on a **pull request** the action scans only that PR's commits,
+> so a config problem here can stay invisible until a push or scheduled run
+> does a full-history scan.
+
+Configured by
 [`.gitleaks.toml`](../.gitleaks.toml): all default rules, plus an allowlist for
 exactly one value — the Supabase anon key in `.env`.
 
