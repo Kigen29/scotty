@@ -1,5 +1,31 @@
 # scotty
 
+## 1.0.1
+
+### Patch Changes
+
+- 311f149: Update dependencies: the tooling group, next-themes, tailwind-merge,
+  @tanstack/react-query and sonner.
+  
+  Consolidated from four Dependabot pull requests into one branch so the whole set
+  could be verified together, rather than merged one at a time with a rebase
+  between each.
+  
+  All minors and patches. `next-themes` 0.3 → 0.4 and `eslint-plugin-react-refresh`
+  0.4 → 0.5 are 0.x bumps, which can carry breaking changes, so theming was
+  checked in a browser rather than assumed: the root class, `color-scheme` and the
+  painted background all switch correctly between light and dark.
+- bea62b1: Ignore all npm major updates in Dependabot.
+  
+  The previous rule covered only `vite`, `react`, `react-dom` and `tailwindcss`,
+  so the first run proposed a single PR bumping `typescript` 5 → 7, `eslint`
+  9 → 10, `vitest` 3 → 5, `eslint-plugin-react-hooks` 5 → 7 and
+  `@vitejs/plugin-react-swc` 3 → 4 together. It failed Build, Lint, Test and
+  Typecheck, and five simultaneous tool majors is not reviewable as one change.
+  
+  Majors now land deliberately, one package per branch, with the app exercised by
+  hand. Patches and minors still arrive automatically.
+
 ## 1.0.0
 
 ### Major Changes
