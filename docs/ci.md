@@ -306,6 +306,18 @@ Without the second, every Dependabot PR fails the `Migrations` job on the
 fail-fast secret check — which is the check doing its job, but the cause is not
 obvious from the message alone.
 
+> **Action majors need a post-merge check.** Two of the five bumped in one
+> grouped PR changed behaviour in ways no PR check could catch:
+> `changesets/action@v2` renamed its inputs (`version` → `version-script`,
+> `title` → `pr-title`, `commit` → `commit-message`) and hard-errors on the old
+> ones — but `release.yml` only runs on push to `main`, so the bump merged green
+> and broke the release on the next push. `gitleaks-action@v3` was fine, but
+> only a full-history dispatch run could prove it, since a PR-scoped scan covers
+> only that PR's commits.
+>
+> After any action bump: merge, then run `security.yml` and `release.yml`
+> against `main` and read the results.
+
 ## Things CI does not do yet
 
 Honest gaps, roughly in the order they are worth closing:

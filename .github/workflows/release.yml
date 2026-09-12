@@ -33,9 +33,14 @@ jobs:
       - name: Create or update the version PR
         uses: changesets/action@v2
         with:
-          version: npm run changeset:version
-          title: "chore(release): version packages"
-          commit: "chore(release): version packages"
+          # v2 renamed these: version -> version-script,
+          # title -> pr-title, commit -> commit-message. The old names are a
+          # hard error, and this workflow only runs on push to main, so a PR
+          # check cannot catch it — the action bump merged green and broke the
+          # release on the next push.
+          version-script: npm run changeset:version
+          pr-title: "chore(release): version packages"
+          commit-message: "chore(release): version packages"
           setupGitUser: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
