@@ -5,7 +5,14 @@ inputs:
   node-version:
     description: Node version to install
     required: false
-    default: "20"
+    # 24 to match .nvmrc and the version this is developed on.
+    #
+    # Not 20: @changesets/cli's bin.js calls module.enableCompileCache(), which
+    # landed in Node 22.1, so the release workflow died with
+    # "TypeError: enableCompileCache is not a function" on Node 20 while every
+    # other job passed. Keeping CI on the same major as local development also
+    # avoids that whole class of works-here-fails-there bug.
+    default: "24"
 
 runs:
   using: composite
