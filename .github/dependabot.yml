@@ -33,15 +33,19 @@ updates:
       supabase:
         patterns: ["@supabase/*"]
     ignore:
-      # Major bumps land deliberately, not on a Monday morning — a Vite or
-      # React major needs the app exercised by hand before merging.
-      - dependency-name: "vite"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "react"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "react-dom"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "tailwindcss"
+      # Every npm major lands deliberately, on its own branch, with the app
+      # exercised by hand. Dependabot handles patches and minors.
+      #
+      # The narrower rule this replaces only covered vite, react, react-dom and
+      # tailwindcss, so the first run proposed a single PR bumping typescript
+      # 5 -> 7, eslint 9 -> 10, vitest 3 -> 5, eslint-plugin-react-hooks 5 -> 7
+      # and @vitejs/plugin-react-swc 3 -> 4 together. It failed Build, Lint,
+      # Test and Typecheck, and five simultaneous tool majors is not something
+      # anyone can review as one change.
+      #
+      # To take a major: `npm i <pkg>@latest` on a branch named for it, run
+      # `npm run verify`, exercise the app, and open a PR on its own.
+      - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
