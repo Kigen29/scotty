@@ -1,5 +1,20 @@
 # scotty
 
+## 1.0.2
+
+### Patch Changes
+
+- 3ebcd81: Update react-hook-form, react-day-picker, input-otp and lovable-tagger.
+  
+  All minors and patches, consolidated from four Dependabot pull requests into one
+  verified change. App renders with no console errors.
+- 12625dc: Fix the release workflow after the `changesets/action` v1 → v2 bump.
+  
+  v2 renamed its inputs — `version` → `version-script`, `title` → `pr-title`,
+  `commit` → `commit-message` — and hard-errors on the old names. Because
+  `release.yml` only runs on push to `main`, the action bump merged green and
+  broke the release on the very next push.
+
 ## 1.0.1
 
 ### Patch Changes
