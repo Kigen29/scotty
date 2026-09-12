@@ -50,7 +50,7 @@ const Auth = () => {
           <div className="mx-auto h-12 w-12 rounded-xl bg-primary flex items-center justify-center mb-4">
             <Zap className="h-6 w-6 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl">ScoutAgent</CardTitle>
+          <CardTitle className="text-2xl">Scotty</CardTitle>
           <CardDescription>
             {isLogin ? "Sign in to your lead generation dashboard" : "Create your account to get started"}
           </CardDescription>

@@ -118,7 +118,7 @@ const LeadDiscovery = () => {
         body: { category: discCategory, location: discLocation, query: searchQuery },
       });
       if (error) throw error;
-      const pipelineLabel = data?.pipeline === "openai" ? "OpenAI" : data?.pipeline === "lovable_ai" ? "Lovable AI" : "Firecrawl";
+      const pipelineLabel = data?.pipeline === "openai" ? "OpenAI" : data?.pipeline === "lovable_ai" ? "Built-in AI" : "Firecrawl";
       toast({ title: "Discovery complete", description: `Found ${data?.leads_added || 0} new leads via ${pipelineLabel}` });
       fetchLeads();
     } catch (error: any) {
@@ -351,7 +351,7 @@ const LeadDiscovery = () => {
               {currentPipeline === "openai" ? <Zap className="h-3 w-3" /> :
                currentPipeline === "lovable_ai" ? <Cpu className="h-3 w-3" /> :
                <Flame className="h-3 w-3" />}
-              {currentPipeline === "openai" ? "OpenAI" : currentPipeline === "lovable_ai" ? "Lovable AI" : "Firecrawl"}
+              {currentPipeline === "openai" ? "OpenAI" : currentPipeline === "lovable_ai" ? "Built-in AI" : "Firecrawl"}
             </Badge>
           </div>
         </CardContent>

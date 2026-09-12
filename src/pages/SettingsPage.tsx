@@ -242,7 +242,7 @@ const SettingsPage = () => {
                 <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${settings.discovery_pipeline === "lovable_ai" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}>
                   <RadioGroupItem value="lovable_ai" className="mt-0.5" />
                   <div className="flex-1">
-                    <div className="flex items-center gap-2"><Cpu className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-sm font-medium">Lovable AI</span></div>
+                    <div className="flex items-center gap-2"><Cpu className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-sm font-medium">Built-in AI</span></div>
                     <p className="text-xs text-muted-foreground mt-0.5">AI research agent — identifies businesses via local knowledge.</p>
                   </div>
                 </label>
@@ -350,12 +350,12 @@ const SettingsPage = () => {
               <div className="space-y-1.5">
                 <Label className="text-xs">Business API Token</Label>
                 <Input type="password" placeholder="••••••••••••••••" disabled className="h-9 bg-muted/30" />
-                <p className="text-[10px] text-muted-foreground">Stored as a secure backend secret. Update via Lovable Cloud settings.</p>
+                <p className="text-[10px] text-muted-foreground">Stored as a secure backend secret. Update it in your Supabase project's Edge Function secrets.</p>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Phone Number ID</Label>
                 <Input type="password" placeholder="••••••••••••••••" disabled className="h-9 bg-muted/30" />
-                <p className="text-[10px] text-muted-foreground">Stored as a secure backend secret. Update via Lovable Cloud settings.</p>
+                <p className="text-[10px] text-muted-foreground">Stored as a secure backend secret. Update it in your Supabase project's Edge Function secrets.</p>
               </div>
               <div className="flex items-start gap-2 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
                 <Zap className="h-3.5 w-3.5 text-emerald-600 mt-0.5 shrink-0" />
