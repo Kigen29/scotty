@@ -31,7 +31,7 @@ jobs:
       - uses: ./.github/actions/setup
 
       - name: Create or update the version PR
-        uses: changesets/action@v1
+        uses: changesets/action@v2
         with:
           version: npm run changeset:version
           title: "chore(release): version packages"
