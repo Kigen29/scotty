@@ -17,10 +17,16 @@ For the contribution rules themselves — branch names, changesets, commit forma
 | [`dependabot.yml`](../.github/dependabot.yml) | Mondays 06:00 EAT | grouped dependency PRs |
 
 Every job installs via the shared composite action at
-[`.github/actions/setup`](../.github/actions/setup/action.yml) — Node 20 plus
+[`.github/actions/setup`](../.github/actions/setup/action.yml) — Node 24 plus
 `npm ci`, with the npm download cache keyed on `package-lock.json`.
 `node_modules` itself is deliberately not cached; that breaks whenever a native
 dependency or the Node version changes.
+
+The Node major is pinned in one place — the composite action's default — and
+mirrored in `.nvmrc` so local and CI agree. It must stay at 22 or above:
+`@changesets/cli` calls `module.enableCompileCache()`, which does not exist
+before Node 22.1, so the release workflow fails on Node 20 while every other
+job passes.
 
 ## CI
 
