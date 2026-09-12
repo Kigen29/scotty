@@ -471,7 +471,8 @@ const LeadDiscovery = () => {
                       checked={selected.has(lead.id)}
                       onCheckedChange={(c) => {
                         const next = new Set(selected);
-                        c ? next.add(lead.id) : next.delete(lead.id);
+                        if (c) next.add(lead.id);
+                        else next.delete(lead.id);
                         setSelected(next);
                       }}
                     />

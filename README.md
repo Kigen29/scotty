@@ -1,5 +1,8 @@
 # Scotty
 
+[![CI](https://github.com/Kigen29/scotty/actions/workflows/ci.yml/badge.svg)](https://github.com/Kigen29/scotty/actions/workflows/ci.yml)
+[![Security](https://github.com/Kigen29/scotty/actions/workflows/security.yml/badge.svg)](https://github.com/Kigen29/scotty/actions/workflows/security.yml)
+
 Autonomous lead discovery and outreach for a Kenyan software studio.
 
 Scotty finds small businesses that have no website or internal systems, scores them
@@ -81,6 +84,32 @@ Edge functions read their own secrets from the Supabase project, never from `.en
 > **Note:** `.env` points at the hosted Supabase project. A local dev server is a
 > frontend onto live production data — run `supabase start` if you want an isolated
 > database to work against.
+
+## Documentation
+
+| Document | Covers |
+| --- | --- |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Branch naming, commit format, changesets, running the checks |
+| [docs/ci.md](docs/ci.md) | Every CI job, why it exists, what to do when it is red |
+| [src/README.md](src/README.md) | Frontend structure, routes, design tokens, conventions |
+| [supabase/README.md](supabase/README.md) | All 18 edge functions, secrets, migrations, schema |
+| [.changeset/README.md](.changeset/README.md) | How to write a release note and pick a bump level |
+
+## Contributing
+
+Everything goes on a branch and through a pull request — never straight to
+`main`. Branches are named `<type>/<description>` (`feat/`, `fix/`, `docs/`,
+`chore/`, `refactor/`, `test/`, `ci/`, `perf/`, `security/`), PR titles are
+conventional commits, and changes that ship behaviour need a changeset. CI
+enforces all three.
+
+```sh
+npm run verify       # lint + typecheck + test + build, same as CI
+npm run edge:check   # type-check the 18 Deno edge functions
+npm run changeset    # write the release note
+```
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before your first PR.
 
 ## Status
 

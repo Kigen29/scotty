@@ -1,0 +1,31 @@
+# gitleaks configuration
+#
+# Inherits every default rule, then allowlists exactly one value: the Supabase
+# anon (publishable) key committed in .env.
+#
+# That key is a JWT, so gitleaks' `jwt` rule matches it — but its payload is
+# {"role":"anon"}, it is designed to be public, and it ships inside the built
+# JS bundle regardless (it is VITE_-prefixed, so Vite inlines it). Row-level
+# security, not key secrecy, is what protects the data. Lovable's hosted build
+# also reads it from the repo, so removing it breaks that deploy.
+#
+# The allowlist is the literal key, NOT a path rule for .env. A service_role
+# key, a Resend key, or a private key added to that same file is still caught —
+# which is the point. If the anon key is ever rotated, update the regex below
+# in the same commit.
+#
+# NOTE: the regex uses a TOML *literal* string (single quotes). A basic string
+# ("...") would reject the `\.` escapes and gitleaks would abort with
+# "toml: invalid escaped character".
+
+title = "Scotty"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Supabase anon/publishable key — public by design, see notes above"
+regexTarget = "match"
+regexes = [
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpaXZqa3lsdWxqb2ZmY2V5ZnBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3NzQ4NTUsImV4cCI6MjA4NjM1MDg1NX0\.YDf4ObI2cmWlRSC8I08hO5p7VReaMHAGHgAXESbKFkE',
+]

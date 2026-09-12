@@ -1,0 +1,41 @@
+name: Feature request
+description: Something Scotty should be able to do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What is hard or impossible today? Describe the situation, not the feature.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+    validations:
+      required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Which phase of the architecture plan does this belong to?
+      options:
+        - "0 — stop the bleeding"
+        - "1 — foundations"
+        - "2 — close the loop"
+        - "3 — real discovery"
+        - "4 — operator surface"
+        - "5 — earn the autonomy back"
+        - "Not in the plan"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: risk
+    attributes:
+      label: Does this change outbound behaviour?
+      options:
+        - label: This could change who gets contacted, or how often
+        - label: This touches the database schema

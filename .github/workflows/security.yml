@@ -1,0 +1,162 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays 06:00 UTC — 09:00 EAT, start of the Nairobi working week.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Full-history secret scan. The PR job in pr-hygiene.yml only sees the diff;
+  # this catches anything already committed.
+  # ---------------------------------------------------------------------------
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    # gitleaks-action lists the PR's commits to scope the scan, which the
+    # workflow-level `contents: read` does not cover. Without this it dies on
+    # 403 "Resource not accessible by integration".
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Config lives in .gitleaks.toml: all default rules, with the Supabase
+      # anon key in .env allowlisted by exact value (it is public by design and
+      # ships in the JS bundle anyway). A real secret in that same file is
+      # still caught.
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+
+  # ---------------------------------------------------------------------------
+  # Dependency vulnerabilities. High/critical fails; moderate is reported.
+  # ---------------------------------------------------------------------------
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      # Blocking gate covers runtime dependencies — the code that reaches a
+      # user's browser. Build tooling is reported but does not block: the only
+      # outstanding high is Vite 5's dev-server path traversal, whose fix is a
+      # major bump to Vite 8. Tracked as a follow-up, not a release blocker,
+      # because the dev server never runs in production.
+      - name: npm audit — runtime deps, high and critical block
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Full audit report including build tooling (advisory)
+        if: always()
+        run: |
+          {
+            echo "## Dependency audit"
+            echo
+            echo "### Runtime dependencies (blocking)"
+            echo '```'
+            npm audit --omit=dev 2>&1 | tail -25 || true
+            echo '```'
+            echo "### Including build tooling (advisory)"
+            echo '```'
+            npm audit 2>&1 | tail -25 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Static analysis for injection, XSS, and unsafe patterns.
+  # ---------------------------------------------------------------------------
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    # Code scanning is free on public repositories but requires GitHub Advanced
+    # Security on private ones, and this repo is private — so the job fails with
+    # "Code scanning is not enabled for this repository" no matter how it is
+    # configured. Left in place, switched off by default, so it is one repo
+    # variable away from working if the repo goes public or GHAS is purchased:
+    #
+    #   gh variable set ENABLE_CODEQL --body true
+    #
+    # Until then lint, typecheck, gitleaks and the RLS check carry this ground.
+    if: vars.ENABLE_CODEQL == 'true'
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  # ---------------------------------------------------------------------------
+  # RLS is the only thing standing between one user's leads and another's.
+  # A table with RLS disabled, or a policy dropped and not recreated, is the
+  # highest-severity mistake possible in this schema — so assert on it.
+  # ---------------------------------------------------------------------------
+  rls-policies:
+    name: RLS coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every public table must enable RLS and have a policy
+        run: |
+          cd supabase/migrations
+
+          # Tables created across all migrations.
+          TABLES=$(grep -rhoiE 'CREATE TABLE (IF NOT EXISTS )?(public\.)?[a-z_]+' . \
+            | sed -E 's/.*[[:space:]]//; s/^public\.//' | sort -u)
+
+          # Tables that ever get RLS switched on.
+          RLS=$(grep -rhoiE 'ALTER TABLE (public\.)?[a-z_]+ ENABLE ROW LEVEL SECURITY' . \
+            | sed -E 's/ALTER TABLE //I; s/ ENABLE ROW LEVEL SECURITY//I; s/^public\.//' | sort -u)
+
+          # Tables named by at least one policy.
+          POLICIES=$(grep -rhoiE 'CREATE POLICY .* ON (public\.)?[a-z_]+' . \
+            | sed -E 's/.*[[:space:]]//; s/^public\.//' | sort -u)
+
+          echo "Tables found:"; echo "$TABLES" | sed 's/^/  /'
+
+          fail=0
+          for t in $TABLES; do
+            miss=""
+            echo "$RLS"      | grep -qx "$t" || miss="$miss RLS-not-enabled"
+            echo "$POLICIES" | grep -qx "$t" || miss="$miss no-policy"
+            if [ -n "$miss" ]; then
+              echo "::error::Table '$t':$miss"
+              fail=1
+            fi
+          done
+
+          if [ "$fail" -eq 1 ]; then
+            echo ""
+            echo "Every table holding lead or customer data must have RLS enabled"
+            echo "and at least one policy. Add them in the same migration that"
+            echo "creates the table."
+            exit 1
+          fi
+          echo "✓ All tables enable RLS and are covered by a policy."

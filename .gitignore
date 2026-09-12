@@ -22,3 +22,21 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Test coverage
+coverage
+*.lcov
+
+# Env
+# NOTE: .env is intentionally committed — it holds only the PUBLIC Supabase
+# anon/publishable key, project id and URL, all of which ship inside the built
+# JS bundle anyway (they are VITE_-prefixed). Lovable's hosted build reads it
+# from the repo, so removing it breaks that deploy. Real secrets live in
+# Supabase Edge Function secrets and are never in this repo — the
+# secret-scan CI job enforces that.
+.env.local
+.env.*.local
+
+# Supabase local
+supabase/.branches
+supabase/.temp

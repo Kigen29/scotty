@@ -1,0 +1,43 @@
+{
+  "$schema": "https://deno.land/x/deno/cli/schemas/config-file.v1.json",
+
+  // This file exists so `deno check` / `deno lint` can resolve these functions
+  // locally and in CI. The Supabase edge runtime resolves `npm:` and `https:`
+  // specifiers on its own and does not read this config, so nothing here
+  // changes how the deployed functions behave.
+  //
+  //   npm run edge:check    type-check every function
+  //   npm run edge:lint     lint every function
+
+  // Several functions import `npm:resend` / `npm:svix`. Without this, deno
+  // refuses to resolve them and reports a package-not-found error that looks
+  // like a code bug but is not one.
+  "nodeModulesDir": "auto",
+
+  "lint": {
+    "rules": {
+      "exclude": [
+        // Deferred: the functions lean on `any` for Supabase row shapes.
+        // Tracked as debt in the lint budget rather than silenced per-file.
+        "no-explicit-any",
+        // Inline `https://esm.sh/...` and `npm:` specifiers are the documented
+        // Supabase edge-function pattern — the deployed runtime resolves them
+        // directly and there is no install step. Newer Deno versions flag them
+        // by default, which would fail all 18 functions for following the
+        // platform's own convention.
+        "no-import-prefix"
+      ]
+    }
+  },
+
+  "fmt": {
+    "lineWidth": 100,
+    "semiColons": true,
+    "singleQuote": false
+  },
+
+  "imports": {
+    "resend": "npm:resend@2.0.0",
+    "svix": "npm:svix@1"
+  }
+}

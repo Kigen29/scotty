@@ -1,0 +1,71 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # Collects pending changesets into a "Version packages" PR. Merging that PR
+  # bumps the version, rewrites CHANGELOG.md, and tags the release.
+  #
+  # Nothing is published to npm — Scotty is a private application. The point is
+  # the changelog and the tag: when the agent misbehaves at 07:00, `git log`
+  # between two tags tells you what changed.
+  version:
+    name: Version PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup
+
+      - name: Create or update the version PR
+        uses: changesets/action@v1
+        with:
+          version: npm run changeset:version
+          title: "chore(release): version packages"
+          commit: "chore(release): version packages"
+          setupGitUser: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Reports what is queued for the next release, so a glance at the run tells
+  # you whether anything is waiting to ship.
+  pending:
+    name: Pending changesets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+
+      - name: Summarise
+        run: |
+          {
+            echo "## Pending release notes"
+            echo
+            if ls .changeset/*.md >/dev/null 2>&1 && \
+               [ "$(ls .changeset/*.md | grep -v README | wc -l)" -gt 0 ]; then
+              for f in .changeset/*.md; do
+                case "$f" in *README.md) continue ;; esac
+                echo "### \`$(basename "$f")\`"
+                echo '```md'
+                cat "$f"
+                echo '```'
+              done
+            else
+              echo "_Nothing queued — main is level with the last release._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
