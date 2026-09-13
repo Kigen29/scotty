@@ -184,16 +184,32 @@ Rules:
 3. **Add indexes with the query that needs them.** There are currently **zero**
    indexes across all 23 migrations, so every hot query is a sequential scan.
 
+### The schedule
+
+Captured 13 September 2026 and recorded in
+`20260913090000_pause_and_record_cron_schedule.sql`, which also pauses it:
+
+| jobid | jobname | schedule (UTC) | runs/day |
+| --- | --- | --- | --- |
+| 9 | `auto-discover-every-6h` | `0 */6 * * *` | 4 |
+| 10 | `auto-follow-up-every-2h` | `0 */2 * * *` | 12 |
+| 11 | `daily-outreach-every-2h` | `0 8,10,12,14,16 * * *` | 5 |
+| 12 | `daily-outreach-9am` | `0 6 * * *` | 1 |
+| 13 | `process-sequences-every-2h` | `0 */2 * * *` | 12 |
+
+34 invocations a day, **30 of which can send**. Jobs 10 and 13 share the same
+expression, so they fire simultaneously — two senders drawing on one daily cap
+while counting it differently.
+
+`social-discover` has no job; it runs only when `auto-discover` chains to it.
+
+Times are UTC and Kenya is UTC+3, so the every-2h jobs begin at 03:00 EAT —
+outside the `active_hours` the Settings screen collects and no sender reads.
+
 ### Known drift
 
-The deployed database contains things no migration creates:
-
-- the `pg_cron` schedule that drives the entire autonomous system
-- the `get_cron_headers()` function (it appears in the generated `types.ts`)
-
-`CREATE EXTENSION pg_cron` is in the migrations; not one `cron.schedule` call is.
-The schedule cannot be reviewed, reproduced, or restored from this repo.
-Capturing it in a migration is Phase 1.
+`get_cron_headers()` exists in the deployed database and in the generated
+`types.ts`, but in no migration.
 
 ## Schema
 
