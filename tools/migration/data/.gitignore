@@ -1,3 +1,4 @@
-# Exported JSON lands here. Real data, never committed.
+# Exported data lands here. Real leads, never committed.
+*.csv
 *.json
 !.gitkeep

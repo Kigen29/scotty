@@ -14,25 +14,36 @@ So this is not a chore to rush at cutover. It is a rehearsal, run twice: once
 now to prove the route works and establish the numbers, once again at cutover
 for real.
 
-## Why JSON and not CSV
+## Why base64, of all things
 
-CSV through a web SQL editor is where this migration would quietly lose data.
-The schema has:
+The obvious approach — one `jsonb_agg` per table, copied out of the result cell
+— does not survive contact with this data. `leads` is **1.4 MB** and
+`email_campaigns` **632 kB**, and a web SQL editor will not hand you a single
+cell that size intact.
+
+The next obvious approach, plain CSV of the real columns, is worse. The schema
+has:
 
 | Hazard | Where |
 | --- | --- |
-| `jsonb` columns | `leads.analysis`, `leads.social_links`, `leads.contact_channels`, `settings.portfolio_projects`, `sequences.steps` |
-| `text[]` arrays | `settings.services`, `target_categories`, `target_locations`, `portfolio_links`, `follow_up_intervals` |
-| Embedded newlines and commas | `email_campaigns.body`, `conversations.message` |
+| `jsonb` | `leads.analysis`, `social_links`, `contact_channels`, `settings.portfolio_projects`, `sequences.steps` |
+| `text[]` | `settings.services`, `target_categories`, `target_locations`, `portfolio_links`, `follow_up_intervals` |
+| Newlines, commas, semicolons | `email_campaigns.body`, `conversations.message` |
 
-Every one is a chance for a delimiter or a quote to be misread, and the failure
-mode is **silent**: the row count matches and a field is subtly wrong. You find
-out months later when the agent behaves oddly.
+Each is a chance for a delimiter or quote to be misread, and **the failure is
+silent**: the row count still matches and a field is subtly wrong. You would
+find out months later when the agent behaved strangely.
 
-`jsonb_agg` removes the class of problem. Postgres serialises, Postgres parses
-it back. Nested objects, arrays, newlines, unicode and NULLs all survive
-exactly, and `jsonb_populate_record` on the way in means Postgres does the type
-coercion rather than a script guessing at it.
+So the export is **one column, one row per record, base64**. The alphabet is
+`[A-Za-z0-9+/=]` — no delimiter, no quote, no newline, no unicode. It survives
+any exporter, at any size, without needing to trust its quoting. On the way
+back in, `jsonb_populate_record` lets Postgres coerce each column from its own
+definition, so there is no per-column mapping in a script to drift.
+
+This was tested against deliberately hostile input before being relied on —
+embedded newlines, semicolons, double quotes, em dashes, Chinese characters,
+nested objects, arrays, nulls, quoted and unquoted lines, CRLF endings. All
+round-tripped exactly.
 
 ## Running it
 
@@ -44,15 +55,15 @@ this is where we find out rather than halfway through.
 
 **2. Export**
 
-Run each block in [`02-export.sql`](02-export.sql). Each returns a single value:
-a JSON array of that table's rows. Copy the whole cell — including the
-surrounding `[` `]` — into `data/<table>.json`.
+Run each block in [`02-export.sql`](02-export.sql). Each returns one row per
+record, one column, base64.
 
-Do **not** use the editor's CSV export button for these. Copy the cell.
+**Use the editor's CSV export button** — the same one you used for the cron
+list — and save each as `data/<table>.csv`.
 
-Too large for one query? Use the paginated form at the bottom of that file and
-save `leads.part1.json`, `leads.part2.json`, and so on. The importer
-concatenates any file matching `<table>*.json`, so parts need no merging.
+Run the counts query at the bottom of that file too, and keep the output. It is
+what `migrate:verify` compares against, and it is the only defence against an
+export that truncated and still looks plausible.
 
 **3. Restore locally and verify**
 
