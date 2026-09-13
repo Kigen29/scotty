@@ -149,28 +149,37 @@ Deno.serve(async (req) => {
           .maybeSingle();
         if (existingCampaign) continue;
 
-        // Determine best contact channel
-        const contactChannels = (lead as any).contact_channels || [];
-        let channel = "email";
-        let contactValue = lead.email || "";
+        // Email is the only channel this function may initiate on.
+        //
+        // WhatsApp was removed: Meta only permits free-form messages inside a
+        // 24-hour window a customer opened. Business-initiated contact needs
+        // opt-in and a pre-approved template, so cold free-form sending is a
+        // policy violation that gets the number restricted — the error 133010
+        // handling this code used to carry suggests it was already happening.
+        //
+        // instagram_dm and linkedin were removed because they never sent
+        // anything. They generated a draft with an LLM call and stopped; no
+        // code path has ever delivered one. That burned tokens and inflated
+        // the draft count for messages nobody could receive.
+        //
+        // A lead reachable only by phone is now a signal to call them
+        // yourself, recorded in the activity log rather than silently skipped.
+        const channel = "email";
 
         if (!lead.email) {
-          const whatsapp = contactChannels.find((c: any) => c.type === "whatsapp");
-          const igDm = contactChannels.find((c: any) => c.type === "instagram_dm");
-          const linkedin = contactChannels.find((c: any) => c.type === "linkedin");
-
           if (lead.phone) {
-            channel = "whatsapp";
-            contactValue = whatsapp?.value || lead.phone;
-          } else if (igDm) {
-            channel = "instagram_dm";
-            contactValue = igDm.handle || "";
-          } else if (linkedin) {
-            channel = "linkedin";
-            contactValue = linkedin.url || "";
-          } else {
-            continue;
+            await supabase.from("activity_logs").insert({
+              user_id: userSettings.user_id,
+              action: "lead_requires_manual_contact",
+              details: {
+                lead_id: lead.id,
+                business_name: lead.business_name,
+                phone: lead.phone,
+                reason: "No email address. Phone contact is manual — Scotty does not initiate WhatsApp.",
+              },
+            });
           }
+          continue;
         }
 
         // Build analysis context
@@ -187,34 +196,14 @@ Deno.serve(async (req) => {
         const safeCat = sanitizeForPrompt(lead.category) || "business";
         const safeLoc = sanitizeForPrompt(lead.location) || "Kenya";
 
-        const channelPrompts: Record<string, string> = {
-          email: `Write a compelling personal cold email from ${senderName} to ${safeName} (${safeCat} in ${safeLoc}).
+        const outreachPrompt = `Write a compelling personal cold email from ${senderName} to ${safeName} (${safeCat} in ${safeLoc}).
 - They ${lead.has_website ? "have a basic website" : "don't have a website"}
 - Services offered: ${services}${painPointsText}${solutionsText}
 ${portfolio ? `- Portfolio: ${portfolio}` : ""}
 - End with soft CTA (call or WhatsApp chat)
 - Sign off as ${senderName}
 ${signature ? `- Signature: ${signature}` : ""}
-- Include "Reply STOP to unsubscribe" at the bottom`,
-
-          whatsapp: `Write a short, friendly WhatsApp message from ${senderName} to ${safeName} (${safeCat} in ${safeLoc}).
-- Keep it under 150 words, conversational
-- They ${lead.has_website ? "have a basic website" : "don't have a website"}
-- You offer: ${services}${painPointsText}
-- Be casual but professional — WhatsApp style
-- End with a question to start conversation`,
-
-          instagram_dm: `Write a short Instagram DM from ${senderName} to @${contactValue} (${safeName}, ${safeCat} in ${safeLoc}).
-- Max 100 words, casual and genuine
-- Compliment their content/business first
-- Mention how you could help with their online presence${painPointsText}
-- End with a friendly question`,
-
-          linkedin: `Write a LinkedIn connection message from ${senderName} to ${safeName} (${safeCat} in ${safeLoc}).
-- Max 300 characters (LinkedIn limit)
-- Professional but warm
-- Mention a specific way you could help${painPointsText}`,
-        };
+- Include "Reply STOP to unsubscribe" at the bottom`;
 
         try {
           const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -226,8 +215,8 @@ ${signature ? `- Signature: ${signature}` : ""}
             body: JSON.stringify({
               model: "google/gemini-3-flash-preview",
               messages: [
-                { role: "system", content: `You are writing ${channel} messages on behalf of a freelance web developer doing outreach to East African businesses.` },
-                { role: "user", content: channelPrompts[channel] || channelPrompts.email },
+                { role: "system", content: "You are writing cold emails on behalf of a freelance web developer doing outreach to East African businesses." },
+                { role: "user", content: outreachPrompt },
               ],
               tools: [{
                 type: "function",
@@ -336,79 +325,6 @@ ${signature ? `- Signature: ${signature}` : ""}
             }
           }
 
-          // Auto-send WhatsApp messages via Meta Cloud API
-          if (channel === "whatsapp" && contactValue) {
-            const WHATSAPP_TOKEN = Deno.env.get("WHATSAPP_BUSINESS_API_TOKEN");
-            const PHONE_NUMBER_ID = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
-
-            if (WHATSAPP_TOKEN && PHONE_NUMBER_ID) {
-              // Clean phone number: remove +, spaces, dashes
-              const cleanPhone = contactValue.replace(/[\s+\-()]/g, "");
-
-              try {
-                const waResponse = await fetch(
-                  `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
-                  {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${WHATSAPP_TOKEN}`,
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      messaging_product: "whatsapp",
-                      to: cleanPhone,
-                      type: "text",
-                      text: { body: message.body },
-                    }),
-                  }
-                );
-
-                if (waResponse.ok) {
-                  await supabase.from("email_campaigns").update({
-                    status: "sent",
-                    sent_at: new Date().toISOString(),
-                  }).eq("id", campaign.id);
-
-                  await supabase.from("leads").update({ status: "contacted" }).eq("id", lead.id);
-
-                  await supabase.from("activity_logs").insert({
-                    user_id: userSettings.user_id,
-                    action: "auto_whatsapp_sent",
-                    details: { business_name: lead.business_name, to: cleanPhone },
-                  });
-                  totalSent++;
-                } else {
-                  const errBody = await waResponse.text();
-                  totalErrors++;
-                  errors.push(`WhatsApp failed for ${lead.business_name}: ${errBody}`);
-
-                  // Check for "Account not registered" (133010) — mark phone as invalid
-                  try {
-                    const errJson = JSON.parse(errBody);
-                    if (errJson?.error?.code === 133010) {
-                      // Remove phone and WhatsApp channel to prevent future retries
-                      const existingChannels = (lead as any).contact_channels || [];
-                      const filteredChannels = existingChannels.filter((c: any) => c.type !== "whatsapp");
-                      await supabase.from("leads").update({
-                        phone: null,
-                        contact_channels: filteredChannels,
-                      }).eq("id", lead.id);
-                    }
-                  } catch (_) { /* ignore parse errors */ }
-
-                  await supabase.from("activity_logs").insert({
-                    user_id: userSettings.user_id,
-                    action: "auto_whatsapp_failed",
-                    details: { business_name: lead.business_name, to: cleanPhone, error: errBody },
-                  });
-                }
-              } catch (waErr) {
-                totalErrors++;
-                errors.push(`WhatsApp error for ${lead.business_name}: ${waErr}`);
-                console.error(`WhatsApp send failed for ${lead.business_name}:`, waErr);
-              }
-            }
-          }
         } catch (err) {
           totalErrors++;
           errors.push(`Outreach error for ${lead.business_name}: ${err}`);

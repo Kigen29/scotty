@@ -49,11 +49,21 @@ review.
 | --- | --- | --- |
 | `generate-email` | manual | email |
 | `send-email` | manual | email — **strictest guards of the four senders** |
-| `daily-outreach` | cron | email, WhatsApp, Instagram DM, LinkedIn |
+| `daily-outreach` | cron | email only |
 | `auto-follow-up` | cron | email — drains drafts, then a 3-step cadence |
 | `process-sequences` | cron | email — a third cadence engine |
 | `generate-sequence-steps` | manual | authoring helper |
 
+> **Email is the only channel Scotty initiates on.** WhatsApp was removed
+> because Meta only permits free-form messages inside a 24-hour window the
+> *customer* opened; business-initiated contact needs opt-in and an approved
+> template. Instagram DM and LinkedIn were removed because they never sent
+> anything — they generated a draft with an LLM call and stopped.
+>
+> Inbound WhatsApp still works. If an owner messages you, that opens the window
+> legitimately, which is why the outreach email still suggests a WhatsApp chat
+> as its call to action — letting them initiate is the compliant path.
+>
 > Four send paths with four different rulebooks. Only `send-email` blocks on
 > failed email verification; only the cron three check `unsubscribed`; **none**
 > respect `active_hours_start` / `active_hours_end`, which the UI collects and
