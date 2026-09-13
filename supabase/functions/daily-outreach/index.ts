@@ -46,6 +46,29 @@ Deno.serve(async (req) => {
     scopedUserId = claimsData.claims.sub as string;
   }
 
+  // ── AUTONOMY KILL SWITCH ─────────────────────────────────────────────────
+  // Every scheduled path is off unless the project explicitly opts in, so a
+  // cron job nobody can find cannot discover or send. Manual, user-triggered
+  // functions are unaffected — the app still works by hand.
+  //
+  // To re-enable, set AUTONOMY_ENABLED=true in the project's edge function
+  // secrets. Absence of the secret means disabled, so this is safe by default.
+  //
+  // Duplicated across the five scheduled functions on purpose: a safety
+  // mechanism should not depend on a shared import resolving at deploy time.
+  // Phase 1 folds it into _shared/ along with everything else.
+  if (Deno.env.get("AUTONOMY_ENABLED") !== "true") {
+    console.warn("Autonomy disabled: AUTONOMY_ENABLED is not \"true\". Skipping.");
+    return new Response(
+      JSON.stringify({
+        success: true,
+        skipped: true,
+        reason: "Autonomy is disabled. Set AUTONOMY_ENABLED=true in edge function secrets to re-enable.",
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
