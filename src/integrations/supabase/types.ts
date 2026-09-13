@@ -285,6 +285,7 @@ export type Database = {
           unsubscribed: boolean | null
           updated_at: string
           user_id: string
+          verification_state: string
           website_url: string | null
         }
         Insert: {
@@ -311,6 +312,7 @@ export type Database = {
           unsubscribed?: boolean | null
           updated_at?: string
           user_id: string
+          verification_state?: string
           website_url?: string | null
         }
         Update: {
@@ -337,6 +339,7 @@ export type Database = {
           unsubscribed?: boolean | null
           updated_at?: string
           user_id?: string
+          verification_state?: string
           website_url?: string | null
         }
         Relationships: []
