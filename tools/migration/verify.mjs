@@ -21,6 +21,33 @@ const CONN =
   process.env.MIGRATION_DATABASE_URL ??
   "postgres://scotty:scotty_local_dev@127.0.0.1:54329/scotty";
 
+/**
+ * Row counts from the source, taken with the counts query at the bottom of
+ * 02-export.sql on 13 September 2026.
+ *
+ * These live here so the check is automatic. Comparing two printed tables by
+ * eye is exactly the kind of step that gets skimmed at cutover, which is when
+ * it matters most — a table that exported short still prints a plausible
+ * number, and only a comparison catches it.
+ *
+ * Re-run the counts query and update these before the cutover export; the
+ * source will have moved on.
+ */
+const SOURCE_COUNTS = {
+  ab_tests: 0,
+  activity_logs: 456,
+  conversations: 0,
+  email_campaigns: 337,
+  icp_profiles: 1,
+  leads: 410,
+  meetings: 0,
+  profiles: 1,
+  sequence_enrollments: 0,
+  sequence_templates: 1,
+  sequences: 1,
+  settings: 1,
+};
+
 // The fingerprint query. Runs identically on both databases.
 //
 // Beyond row counts it checks: the jsonb columns are still objects rather than
@@ -72,20 +99,42 @@ const { rows } = await client.query(FINGERPRINT);
 await client.end();
 
 const cols = ["t", "rows", "jsonb_present", "jsonb_objects", "max_text"];
-const head = ["table", "rows", "col_a", "col_b", "max_len"];
-const widths = cols.map((c, i) =>
-  Math.max(head[i].length, ...rows.map((r) => String(r[c] ?? "").length)),
-);
+const head = ["table", "rows", "source", "", "col_a", "col_b", "max_len"];
 
-console.log("\n  LOCAL COPY\n");
+const lines = rows.map((r) => {
+  const local = Number(r.rows);
+  const src = SOURCE_COUNTS[r.t];
+  const known = src !== undefined;
+  const verdict = !known ? "?" : local === src ? "ok" : local === 0 ? "MISSING" : "MISMATCH";
+  return [r.t, String(local), known ? String(src) : "-", verdict,
+          String(r.jsonb_present ?? ""), String(r.jsonb_objects ?? ""), String(r.max_text ?? "")];
+});
+
+const widths = head.map((h, i) => Math.max(h.length, ...lines.map((l) => l[i].length)));
+console.log("");
+console.log("  LOCAL COPY vs SOURCE");
+console.log("");
 console.log("  " + head.map((h, i) => h.padEnd(widths[i])).join("  "));
 console.log("  " + widths.map((w) => "-".repeat(w)).join("  "));
-for (const r of rows) {
-  console.log("  " + cols.map((c, i) => String(r[c] ?? "").padEnd(widths[i])).join("  "));
+for (const l of lines) console.log("  " + l.map((c, i) => c.padEnd(widths[i])).join("  "));
+
+const missing = lines.filter((l) => l[3] === "MISSING").map((l) => l[0]);
+const wrong = lines.filter((l) => l[3] === "MISMATCH").map((l) => l[0]);
+
+console.log("");
+if (wrong.length) {
+  console.log(`  MISMATCH on ${wrong.join(", ")} — the export is short. Re-export before trusting it.`);
+  process.exitCode = 1;
+} else if (missing.length) {
+  console.log(`  Not yet imported: ${missing.join(", ")}`);
+  console.log("  Export those blocks from 02-export.sql and re-run migrate:import.");
+  process.exitCode = 1;
+} else {
+  console.log("  Every table matches the source count.");
 }
 
 console.log(`
-  Now run the identical query on the source and compare.
-  Every line must match. Paste this into the Lovable SQL editor:
-  ${"-".repeat(60)}`);
-console.log(FINGERPRINT.trim());
+  Row counts are necessary, not sufficient. col_a/col_b/max_len above check that
+  jsonb stayed an object, arrays kept their elements, and the longest body
+  survived — which is where a mangled import would actually show.
+`);
