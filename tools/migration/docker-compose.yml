@@ -1,0 +1,35 @@
+# Local Postgres for the migration rehearsal.
+#
+# This is deliberately NOT the production compose file — that arrives in
+# Phase 2 with the API, worker, Redis and Nginx. This one exists only so the
+# export can be restored and counted somewhere before anyone trusts it.
+#
+#   docker compose -f tools/migration/docker-compose.yml up -d
+#   npm run migrate:import
+#   npm run migrate:verify
+#
+# Data lives in a named volume, so `down` keeps it and `down -v` discards it.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: scotty-migration-db
+    environment:
+      # Local-only, listening on loopback, holding a copy of data we already
+      # have. Not a secret, and deliberately not read from an env file so the
+      # rehearsal works on a fresh clone with no setup.
+      POSTGRES_PASSWORD: scotty_local_dev
+      POSTGRES_USER: scotty
+      POSTGRES_DB: scotty
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - scotty_migration_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scotty -d scotty"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  scotty_migration_data:
