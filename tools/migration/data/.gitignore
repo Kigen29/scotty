@@ -1,0 +1,3 @@
+# Exported JSON lands here. Real data, never committed.
+*.json
+!.gitkeep
