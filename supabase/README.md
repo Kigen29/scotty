@@ -85,6 +85,40 @@ review.
 > Both write data no teammate can read back: every RLS policy is still
 > `auth.uid() = user_id`.
 
+## Turning autonomy off and on
+
+The five scheduled functions — `auto-discover`, `social-discover`,
+`daily-outreach`, `auto-follow-up`, `process-sequences` — refuse to do anything
+unless the project sets:
+
+```
+AUTONOMY_ENABLED=true
+```
+
+**Absence of the secret means disabled.** They return
+`{ skipped: true, reason: ... }` and exit before touching the database, so a
+`pg_cron` job still firing on a schedule nobody can find is harmless.
+
+Manual, user-triggered functions are unaffected: discovery from the UI, drafting,
+sending a single campaign and both webhooks all keep working.
+
+This exists because the `pg_cron` schedule lives in the hosting provider's
+dashboard rather than in this repository (see *Known drift* below), so the
+schedule cannot be paused from here. The switch can be.
+
+To pause the schedule properly, in the provider's SQL editor:
+
+```sql
+SELECT jobid, jobname, schedule, active FROM cron.job ORDER BY jobid;
+
+SELECT cron.alter_job(jobid, active := false) FROM cron.job WHERE active;
+-- and to resume
+SELECT cron.alter_job(jobid, active := true)  FROM cron.job WHERE NOT active;
+```
+
+`alter_job` rather than `unschedule` keeps the definitions, so one statement
+brings them back.
+
 ## Secrets
 
 Edge functions read secrets from the Supabase project, never from `.env`:
