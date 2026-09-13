@@ -1,5 +1,65 @@
 # scotty
 
+## 2.0.0
+
+### Major Changes
+
+- f7d53e6: Add an autonomy kill switch to the five scheduled edge functions.
+  
+  `auto-discover`, `social-discover`, `daily-outreach`, `auto-follow-up` and
+  `process-sequences` now exit immediately unless `AUTONOMY_ENABLED=true` is set
+  in the project's edge function secrets. Absence of the secret means disabled, so
+  the safe state is the default.
+  
+  The `pg_cron` schedule that drives these lives in the hosting provider's
+  dashboard, not in this repository, so it cannot be paused from here. This makes
+  it not matter: the jobs can keep firing and will do nothing.
+  
+  Manual functions are unaffected — discovery from the UI, drafting, sending a
+  single campaign and both webhooks all still work.
+  
+  **Autonomous outreach stops when this deploys** until the secret is set.
+- 684c483: Stop initiating WhatsApp, Instagram DM and LinkedIn messages.
+  
+  Email is now the only channel `daily-outreach` initiates on.
+  
+  WhatsApp is removed because Meta only permits free-form messages inside a
+  24-hour window the *customer* opened. Business-initiated contact requires opt-in
+  and a pre-approved template, so cold free-form sending is a policy violation
+  that gets the number restricted — the error 133010 handling this code carried
+  suggests it was already happening.
+  
+  Instagram DM and LinkedIn are removed because they never sent anything. They
+  generated a draft with an LLM call and stopped; no code path has ever delivered
+  one. That burned tokens and inflated the draft count with messages nobody could
+  receive.
+  
+  Inbound WhatsApp is untouched — an owner messaging you still lands in
+  Conversations, and that is the compliant way for a WhatsApp conversation to
+  start. A lead reachable only by phone is now logged as needing a manual call
+  rather than silently skipped.
+- bfcd5c0: Pause the scheduled jobs and record the schedule in version control.
+  
+  The `pg_cron` schedule existed only in the hosting provider's dashboard: it
+  could not be reviewed, reproduced, restored, or paused from this repository. It
+  is now captured in a migration, which also switches every active job off.
+  
+  It was 34 invocations a day, 30 of them able to send. Two jobs shared the same
+  expression and fired simultaneously, drawing on one daily cap while counting it
+  differently.
+  
+  Uses `alter_job`, not `unschedule`, so the definitions survive and one statement
+  brings them back.
+
+### Patch Changes
+
+- 5a1a3d9: Update lucide-react from 0.462.0 to 0.577.0.
+  
+  A 115-version jump across 54 distinct icons in 37 files. Icons get renamed and
+  removed between lucide releases, and every one is a named import, so
+  `tsc --noEmit` is a genuine check here rather than a formality — it passes, so
+  no icon this app uses has been renamed or dropped.
+
 ## 1.0.3
 
 ### Patch Changes
