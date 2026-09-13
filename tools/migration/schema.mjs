@@ -84,6 +84,18 @@ BEGIN
     CREATE PUBLICATION supabase_realtime;
   END IF;
 END $$;
+
+-- Supabase keeps pgcrypto in the extensions schema and puts that schema on the
+-- search path for every connection. A plain image does not, so gen_random_bytes
+-- and friends are invisible and any migration or column DEFAULT that calls them
+-- fails. Set it at the database level, not just this session, so the importer's
+-- own connection inherits it when a DEFAULT fires during INSERT.
+DO $$
+BEGIN
+  EXECUTE format('ALTER DATABASE %I SET search_path TO public, extensions', current_database());
+END $$;
+
+SET search_path TO public, extensions;
 `;
 
 const client = new pg.Client({ connectionString: CONN });
