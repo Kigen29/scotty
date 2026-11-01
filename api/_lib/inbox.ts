@@ -305,12 +305,12 @@ async function alert(from: { name: string; email: string; business: string | nul
 }
 
 /**
- * Scotty may only email someone who has written to us first. That keeps it inside Resend's policy
+ * Scotty may only email someone who has written to us first, or who agreed on a call to hear from us. That keeps it inside Resend's policy
  * (no cold outreach) and Kenya's consent rules for marketing. Cold outreach gets its own setup later.
  */
 export async function canReply(leadId: string, operatorId: string) {
-  const [lead] = await q<{ email: string | null; unsubscribed: boolean | null; inbound: number }>(
-    `SELECT l.email, l.unsubscribed,
+  const [lead] = await q<{ email: string | null; unsubscribed: boolean | null; inbound: number; consent_at: string | null }>(
+    `SELECT l.email, l.unsubscribed, l.consent_at,
             (SELECT count(*)::int FROM scotty.conversations c WHERE c.lead_id = l.id AND c.direction = 'inbound') AS inbound
        FROM scotty.leads l WHERE l.id = $1::uuid AND l.user_id = $2::uuid`,
     [leadId, operatorId],
@@ -318,7 +318,8 @@ export async function canReply(leadId: string, operatorId: string) {
   if (!lead) return { ok: false as const, reason: "That lead wasn't found." };
   if (!lead.email) return { ok: false as const, reason: "This lead has no email address." };
   if (lead.unsubscribed) return { ok: false as const, reason: "This person asked not to be contacted." };
-  if (!lead.inbound) {
+  // They wrote to us, or agreed on a call to hear from us.
+  if (!lead.inbound && !lead.consent_at) {
     return { ok: false as const, reason: "Scotty only replies to people who have written to you first. Cold outreach will go through the separate outreach setup." };
   }
   return { ok: true as const, email: lead.email };

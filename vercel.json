@@ -16,6 +16,9 @@
     },
     "api/inbound/email.ts": {
       "maxDuration": 120
+    },
+    "api/public/report.ts": {
+      "maxDuration": 30
     }
   },
   "rewrites": [

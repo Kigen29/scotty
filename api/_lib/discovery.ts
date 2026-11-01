@@ -169,7 +169,7 @@ export async function discover(input: { category?: string; location?: string; qu
         JSON.stringify(kind === "social" && p.websiteUri ? { listed: p.websiteUri } : {}),
         p.id, p.googleMapsUri ?? null, p.rating ?? null, p.userRatingCount ?? null,
         score, Math.max(1, Math.round(score / 10)),
-        JSON.stringify({ website: kind, listed_url: p.websiteUri ?? null, registered_domain: domain, search: textQuery }),
+        JSON.stringify({ website: kind, listed_url: p.websiteUri ?? null, registered_domain: domain, search: textQuery, competitors_with_site: withWebsite, search_found: places.length }),
       ],
     );
     if (inserted.length) added++;

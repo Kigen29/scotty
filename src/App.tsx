@@ -11,6 +11,7 @@ import Inbox from "@/pages/Inbox";
 import Leads from "@/pages/Leads";
 import LeadDetail from "@/pages/LeadDetail";
 import Agent from "@/pages/Agent";
+import Calls from "@/pages/Calls";
 import Discovery from "@/pages/Discovery";
 import Campaigns from "@/pages/Campaigns";
 import Reports from "@/pages/Reports";
@@ -49,6 +50,7 @@ const App = () => (
             <Route path="/leads" element={<Leads />} />
             <Route path="/leads/:id" element={<LeadDetail />} />
             <Route path="/agent" element={<Agent />} />
+            <Route path="/calls" element={<Calls />} />
             <Route path="/discovery" element={<Discovery />} />
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/conversations" element={<Navigate to="/inbox" replace />} />
