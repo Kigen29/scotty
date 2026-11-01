@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Copy, ExternalLink, Loader2, MessageSquare, Phone, RefreshCw, Send } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Copy, ExternalLink, Loader2, Mail, MessageSquare, Phone, RefreshCw, Send } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -101,6 +101,20 @@ export function CallPanel({ lead }: { lead: Lead }) {
     },
     onError: (e: Error) => toast({ title: "Couldn't log it", description: e.message, variant: "destructive" }),
   });
+  const usage = useQuery({
+    queryKey: ["outreach-usage"],
+    queryFn: () => action<{ sent_today: number; limit: number; configured: boolean }>("outreach-usage", {}),
+    enabled: !!lead.email && !!prepared,
+  });
+  const emailFirst = useMutation({
+    mutationFn: () => action<{ sent_today: number; limit: number }>("send-first-email", { lead_id: lead.id }),
+    onSuccess: (r) => {
+      toast({ title: "Emailed from outreach@", description: `${r.sent_today} of ${r.limit} today. Their reply will land in the Inbox.` });
+      qc.invalidateQueries({ queryKey: ["outreach-usage"] });
+      refresh();
+    },
+    onError: (e: Error) => toast({ title: "Not sent", description: e.message, variant: "destructive" }),
+  });
   const emailAudit = useMutation({
     mutationFn: () => action("send-report-email", { lead_id: lead.id }),
     onSuccess: () => {
@@ -145,6 +159,17 @@ export function CallPanel({ lead }: { lead: Lead }) {
               <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] hover:bg-muted/50">
                 <ExternalLink className="h-3 w-3" /> Preview their audit
               </a>
+            ) : null}
+            {lead.email && !consented ? (
+              <button
+                disabled={emailFirst.isPending || usage.data?.configured === false}
+                onClick={() => emailFirst.mutate()}
+                title={usage.data?.configured === false ? "The outreach mailbox isn't set up yet" : `Send to ${lead.email} from outreach@`}
+                className="inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] hover:bg-muted/50 disabled:opacity-40"
+              >
+                <Mail className="h-3 w-3" /> {emailFirst.isPending ? "Sending…" : "Email it"}
+                {usage.data ? <span className="text-muted-foreground">({usage.data.sent_today}/{usage.data.limit} today)</span> : null}
+              </button>
             ) : null}
           </div>
           {lead.phone ? (

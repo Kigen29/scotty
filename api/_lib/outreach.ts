@@ -5,7 +5,8 @@ import { z } from "zod";
 import { sql } from "./db.js";
 import { logEvent } from "./inbox.js";
 import { escapeHtml, mailConfigured, sendMail, studioInboxes, textToHtml, DEFAULT_INBOX } from "./mail.js";
-import { replyAddress } from "./email.js";
+import { replyAddress, reportUrl } from "./email.js";
+import { outreachConfigured, outreachDailyLimit, sendOutreachMail } from "./smtp.js";
 import { PACKAGES } from "./triage.js";
 
 /**
@@ -32,7 +33,7 @@ export function shortArea(address: string | null | undefined) {
   return parts.slice(-2).join(", ") || null;
 }
 
-export const reportUrl = (token: string) => `${(process.env.REPORT_BASE_URL ?? "https://code5developers.com/r").replace(/\/$/, "")}/${token}`;
+export { reportUrl };
 
 const STATUSES = ["needs_attention", "missing", "outdated", "low_volume", "strong"] as const;
 
@@ -40,6 +41,7 @@ const Outreach = z.object({
   first_message: z
     .string()
     .describe("The first message to send them (Instagram/Facebook DM, WhatsApp after they've messaged, or email), in the style of the example. Ends by asking if we can send the audit"),
+  email_subject: z.string().describe('A short, personal subject line if the first message goes by email, e.g. "A few things I noticed about Polar on Google". No clickbait'),
   call: z.object({
     opener: z.string().describe("The first two sentences if calling instead: who you are and why you're calling"),
     talking_points: z.array(z.string()).describe("Three short points from the audit findings"),
@@ -314,6 +316,55 @@ export async function sendReportEmail(leadId: string, operatorId: string) {
   );
   await logEvent(operatorId, { kind: "report_sent", summary: `Emailed the free audit to ${lead.business_name}`, leadId });
   return { ok: true };
+}
+
+const STOP_LINE = "If you'd rather not hear from me, just reply \"stop\" and I won't email again.";
+
+/** First emails sent from the outreach mailbox today, Nairobi time. */
+export async function outreachUsage(operatorId: string) {
+  const [{ n }] = await q<{ n: number }>(
+    `SELECT count(*)::int AS n FROM scotty.agent_events
+      WHERE user_id = $1::uuid AND kind = 'first_email_sent'
+        AND created_at >= date_trunc('day', now() AT TIME ZONE 'Africa/Nairobi') AT TIME ZONE 'Africa/Nairobi'`,
+    [operatorId],
+  );
+  return { sent_today: n, limit: outreachDailyLimit(), configured: outreachConfigured() };
+}
+
+/**
+ * Emails the first message from the outreach mailbox: once per business, only to an address they publish, within the
+ * daily limit, with a way to opt out. Their reply comes back to Scotty tagged with the lead, and the agent answers it.
+ */
+export async function sendFirstEmail(leadId: string, operatorId: string) {
+  const [lead] = await q<{ business_name: string; email: string | null; unsubscribed: boolean | null; report: Stored | null; emailed: number }>(
+    `SELECT l.business_name, l.email, l.unsubscribed, l.report,
+            (SELECT count(*)::int FROM scotty.conversations c WHERE c.lead_id = l.id AND c.direction = 'outbound' AND c.channel = 'email') AS emailed
+       FROM scotty.leads l WHERE l.id = $1::uuid AND l.user_id = $2::uuid`,
+    [leadId, operatorId],
+  );
+  if (!lead) throw new Error("That lead wasn't found.");
+  if (lead.unsubscribed) throw new Error("This business asked not to be contacted.");
+  if (!lead.email) throw new Error("There's no email address for this lead.");
+  if (!lead.report?.first_message) throw new Error("Write the first message first.");
+  if (lead.emailed) throw new Error("They've already been emailed. Wait for a reply.");
+  const usage = await outreachUsage(operatorId);
+  if (usage.sent_today >= usage.limit) throw new Error(`Today's limit of ${usage.limit} first emails is used up. More tomorrow.`);
+  if (!process.env.INBOUND_DOMAIN) throw new Error("Replies have nowhere to go: INBOUND_DOMAIN isn't set.");
+
+  const [s] = await q<{ email_signature: string | null }>("SELECT email_signature FROM scotty.settings WHERE user_id = $1::uuid", [operatorId]);
+  const reply = replyAddress(leadId, process.env.INBOUND_DOMAIN);
+  const subject = lead.report.email_subject || `A few things I noticed about ${lead.business_name} on Google`;
+  const text = [lead.report.first_message, s?.email_signature, STOP_LINE].filter(Boolean).join("\n\n");
+  const id = await sendOutreachMail({ to: lead.email, subject, text, replyTo: reply, unsubscribe: `mailto:${reply}?subject=stop` });
+
+  await q(
+    `INSERT INTO scotty.conversations (user_id, lead_id, direction, channel, subject, message, external_id, sent_by)
+     VALUES ($1::uuid, $2::uuid, 'outbound', 'email', $3, $4, $5, 'operator')`,
+    [operatorId, leadId, subject, text, id],
+  );
+  await q("UPDATE scotty.leads SET status = CASE WHEN status IN ('discovered', 'qualified') THEN 'contacted' ELSE status END WHERE id = $1::uuid AND user_id = $2::uuid", [leadId, operatorId]);
+  await logEvent(operatorId, { kind: "first_email_sent", summary: `Emailed the first message to ${lead.business_name}`, leadId });
+  return { ok: true, sent_today: usage.sent_today + 1, limit: usage.limit };
 }
 
 /** What the public audit page shows. Only fields meant for the business itself; nothing internal. */

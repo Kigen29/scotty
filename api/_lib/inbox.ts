@@ -1,5 +1,5 @@
 import { autoReplyDecision, type Decision } from "./autoreply.js";
-import { replyAddress } from "./email.js";
+import { replyAddress, reportUrl } from "./email.js";
 import { sql } from "./db.js";
 import { escapeHtml, mailConfigured, sendMail, studioInboxes, textToHtml, DEFAULT_INBOX } from "./mail.js";
 import { triageConfigured, triageMessage, type StudioSettings, type Triage } from "./triage.js";
@@ -27,6 +27,15 @@ export type Enquiry = {
 const appUrl = () => (process.env.APP_URL ?? "https://scotty.code5developers.com").replace(/\/$/, "");
 
 type Settings = StudioSettings & { auto_reply_enabled: boolean };
+
+/** The operator's first name, for messages signed personally. */
+async function callerFirstName(operatorId: string) {
+  const [r] = await q<{ name: string | null }>(
+    "SELECT coalesce(p.display_name, s.company_name) AS name FROM scotty.settings s LEFT JOIN scotty.profiles p ON p.id = s.user_id WHERE s.user_id = $1::uuid",
+    [operatorId],
+  );
+  return r?.name?.trim().split(/\s+/)[0] || null;
+}
 
 async function loadSettings(operatorId: string): Promise<Settings> {
   const [s] = await q<Settings>(
@@ -241,8 +250,18 @@ async function decideAndAct(conversationId: string, leadId: string, triage: Tria
  */
 export async function sortConversation(conversationId: string, operatorId: string, opts: { renameNewLead?: boolean } = {}) {
   if (!triageConfigured()) throw new Error("Claude isn't set up: ANTHROPIC_API_KEY is missing.");
-  const [row] = await q<{ channel: "website" | "email" | "whatsapp"; subject: string | null; message: string; lead_id: string; business_name: string; email: string | null; phone: string | null }>(
-    `SELECT c.channel, c.subject, c.message, c.lead_id, l.business_name, l.email, l.phone
+  const [row] = await q<{
+    channel: "website" | "email" | "whatsapp";
+    subject: string | null;
+    message: string;
+    lead_id: string;
+    business_name: string;
+    email: string | null;
+    phone: string | null;
+    report_token: string | null;
+    send_message: string | null;
+  }>(
+    `SELECT c.channel, c.subject, c.message, c.lead_id, l.business_name, l.email, l.phone, l.report_token, l.report->>'send_message' AS send_message
        FROM scotty.conversations c JOIN scotty.leads l ON l.id = c.lead_id
       WHERE c.id = $1::uuid AND c.user_id = $2::uuid AND c.direction = 'inbound'`,
     [conversationId, operatorId],
@@ -261,12 +280,17 @@ export async function sortConversation(conversationId: string, operatorId: strin
     .reverse()
     .map((h) => ({ from: (h.direction === "inbound" ? "them" : "us") as "them" | "us", at: h.created_at, text: h.message.slice(0, 2000) }));
 
-  const triage = await triageMessage(await loadSettings(operatorId), {
+  const settings = await loadSettings(operatorId);
+  const triage = await triageMessage(settings, {
     channel: row.channel,
     from: { name: row.business_name, email: row.email, phone: row.phone },
     subject: row.subject,
     body: row.message,
     history,
+    // They're answering our free audit offer: give Claude the link to send if they say yes.
+    ...(row.report_token && row.send_message && history.some((h) => h.from === "us")
+      ? { audit_offer: { link: reportUrl(row.report_token), message: row.send_message, signed_as: (await callerFirstName(operatorId)) ?? null } }
+      : {}),
   });
   if (!triage) throw new Error("Claude declined to sort this message.");
 
@@ -306,7 +330,7 @@ async function alert(from: { name: string; email: string; business: string | nul
 
 /**
  * Scotty may only email someone who has written to us first, or who agreed on a call to hear from us. That keeps it inside Resend's policy
- * (no cold outreach) and Kenya's consent rules for marketing. Cold outreach gets its own setup later.
+ * (no cold outreach) and Kenya's consent rules for marketing. First emails go from the outreach mailbox (smtp.ts).
  */
 export async function canReply(leadId: string, operatorId: string) {
   const [lead] = await q<{ email: string | null; unsubscribed: boolean | null; inbound: number; consent_at: string | null }>(
@@ -320,7 +344,7 @@ export async function canReply(leadId: string, operatorId: string) {
   if (lead.unsubscribed) return { ok: false as const, reason: "This person asked not to be contacted." };
   // They wrote to us, or agreed on a call to hear from us.
   if (!lead.inbound && !lead.consent_at) {
-    return { ok: false as const, reason: "Scotty only replies to people who have written to you first. Cold outreach will go through the separate outreach setup." };
+    return { ok: false as const, reason: "Scotty only replies to people who have written to you first. First emails go from the outreach mailbox." };
   }
   return { ok: true as const, email: lead.email };
 }
