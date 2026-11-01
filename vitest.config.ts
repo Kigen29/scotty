@@ -8,13 +8,13 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    include: ["src/**/*.{test,spec}.{ts,tsx}", "api/**/*.test.ts"],
     coverage: {
       provider: "v8",
       // `json-summary` is what the CI test-health report reads.
       reporter: ["text", "json-summary", "html", "lcov"],
       reportsDirectory: "./coverage",
-      include: ["src/**/*.{ts,tsx}"],
+      include: ["src/**/*.{ts,tsx}", "api/**/*.ts"],
       exclude: [
         "src/components/ui/**",
         "src/integrations/supabase/types.ts",

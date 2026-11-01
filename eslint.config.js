@@ -58,6 +58,19 @@ export default tseslint.config(
     },
   },
 
+  // ---- API: Vercel functions on Node, talking to Neon ----
+  {
+    extends: [js.configs.recommended, ...tseslint.configs.recommended],
+    files: ["api/**/*.ts"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: globals.node,
+    },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "error",
+    },
+  },
+
   // ---- Build / tooling config at the repo root ----
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
