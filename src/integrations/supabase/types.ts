@@ -99,29 +99,50 @@ export type Database = {
       conversations: {
         Row: {
           ai_suggested_reply: string | null
+          ai_suggested_subject: string | null
+          category: string | null
+          channel: string
           created_at: string
           direction: string
+          external_id: string | null
           id: string
           lead_id: string
           message: string
+          subject: string | null
+          summary: string | null
+          urgency: string | null
           user_id: string
         }
         Insert: {
           ai_suggested_reply?: string | null
+          ai_suggested_subject?: string | null
+          category?: string | null
+          channel?: string
           created_at?: string
           direction: string
+          external_id?: string | null
           id?: string
           lead_id: string
           message: string
+          subject?: string | null
+          summary?: string | null
+          urgency?: string | null
           user_id: string
         }
         Update: {
           ai_suggested_reply?: string | null
+          ai_suggested_subject?: string | null
+          category?: string | null
+          channel?: string
           created_at?: string
           direction?: string
+          external_id?: string | null
           id?: string
           lead_id?: string
           message?: string
+          subject?: string | null
+          summary?: string | null
+          urgency?: string | null
           user_id?: string
         }
         Relationships: [

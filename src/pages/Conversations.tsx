@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -18,7 +19,9 @@ const Conversations = () => {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [replyText, setReplyText] = useState("");
+  const [replySubject, setReplySubject] = useState("");
   const [sending, setSending] = useState(false);
+  const [sorting, setSorting] = useState<string | null>(null);
 
   const fetchConversations = useCallback(async () => {
     if (!user) return;
@@ -36,52 +39,39 @@ const Conversations = () => {
 
   useRealtimeSubscription("conversations", user?.id, fetchConversations, true);
 
+  // The server sends first and records the message only if the email went out,
+  // and refuses anyone who hasn't written to us first. See api/_lib/inbox.ts.
   const sendReply = async () => {
     if (!user || !selectedLeadId || !replyText.trim()) return;
     setSending(true);
-    try {
-      const { error } = await supabase.from("conversations").insert({
-        user_id: user.id,
-        lead_id: selectedLeadId,
-        direction: "outbound",
-        message: replyText.trim(),
-      });
-      if (error) throw error;
-
-      // Also send via Resend if lead has email — create a campaign record first
-      const lead = grouped[selectedLeadId]?.lead;
-      if (lead?.email) {
-        const { data: campaign } = await supabase.from("email_campaigns").insert({
-          user_id: user.id,
-          lead_id: selectedLeadId,
-          subject: `Re: ${lead.business_name}`,
-          body: replyText.trim(),
-          template_type: "reply",
-          status: "draft",
-          channel: "email",
-          source: "manual",
-        }).select("id").single();
-
-        if (campaign) {
-          await supabase.functions.invoke("send-email", {
-            body: { campaign_id: campaign.id },
-          });
-        }
-      }
-
-      toast({ title: "Reply sent" });
-      setReplyText("");
-      fetchConversations();
-    } catch (error: any) {
-      toast({ title: "Failed to send", description: error.message, variant: "destructive" });
-    } finally {
-      setSending(false);
+    const { error } = await supabase.functions.invoke("send-reply", {
+      body: { lead_id: selectedLeadId, message: replyText.trim(), subject: replySubject.trim() || undefined },
+    });
+    setSending(false);
+    if (error) {
+      toast({ title: "Not sent", description: error.message, variant: "destructive" });
+      return;
     }
+    toast({ title: "Reply sent", description: `Emailed to ${grouped[selectedLeadId]?.lead?.email}` });
+    setReplyText("");
+    setReplySubject("");
+    fetchConversations();
   };
 
-  const applySuggestedReply = (text: string) => {
-    setReplyText(text);
+  const sortWithClaude = async (conversationId: string) => {
+    setSorting(conversationId);
+    const { error } = await supabase.functions.invoke("sort-conversation", { body: { conversation_id: conversationId } });
+    setSorting(null);
+    if (error) toast({ title: "Couldn't sort it", description: error.message, variant: "destructive" });
+    else fetchConversations();
   };
+
+  const applySuggestedReply = (msg: Tables<"conversations">) => {
+    setReplyText(msg.ai_suggested_reply ?? "");
+    setReplySubject(msg.ai_suggested_subject ?? "");
+  };
+
+  const urgencyVariant = (u: string | null) => (u === "high" ? "destructive" : u === "low" ? "outline" : "secondary");
 
   // Filter by date
   const filtered = dateRange
@@ -109,7 +99,7 @@ const Conversations = () => {
         <p className="text-muted-foreground mt-1 text-sm">Track email threads with business owners</p>
       </div>
 
-      <DateFilter defaultPreset="this_week" onChange={setDateRange} />
+      <DateFilter defaultPreset="all" onChange={setDateRange} />
 
       {leadIds.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
@@ -130,11 +120,16 @@ const Conversations = () => {
                   onClick={() => setSelectedLeadId(leadId)}
                 >
                   <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <h3 className="font-medium text-sm">{thread.lead?.business_name}</h3>
-                      <Badge variant="secondary" className="text-xs">{thread.messages.length}</Badge>
+                      <div className="flex items-center gap-1">
+                        {lastMsg.direction === "inbound" && lastMsg.urgency ? (
+                          <Badge variant={urgencyVariant(lastMsg.urgency)} className="text-xs">{lastMsg.urgency}</Badge>
+                        ) : null}
+                        <Badge variant="secondary" className="text-xs">{thread.messages.length}</Badge>
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{lastMsg.message}</p>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{lastMsg.summary ?? lastMsg.message}</p>
                   </CardContent>
                 </Card>
               );
@@ -153,14 +148,24 @@ const Conversations = () => {
                       <div className={`max-w-[80%] rounded-lg p-3 ${
                         msg.direction === "outbound" ? "bg-primary text-primary-foreground" : "bg-muted"
                       }`}>
-                        <div className="flex items-center gap-1 mb-1">
+                        <div className="flex flex-wrap items-center gap-1 mb-1">
                           {msg.direction === "outbound" ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownLeft className="h-3 w-3" />}
                           <span className="text-xs opacity-75">
-                            {msg.direction === "outbound" ? "You" : activeThread.lead?.business_name}
+                            {msg.direction === "outbound" ? "You" : activeThread.lead?.business_name} · {msg.channel}
                           </span>
+                          {msg.urgency ? <Badge variant={urgencyVariant(msg.urgency)} className="text-[10px] h-4 px-1">{msg.urgency}</Badge> : null}
+                          {msg.category ? <span className="text-[10px] opacity-60">{msg.category.replace(/_/g, " ")}</span> : null}
                         </div>
+                        {msg.summary ? <p className="text-xs italic opacity-75 mb-1">{msg.summary}</p> : null}
+                        {msg.subject ? <p className="text-xs font-medium mb-1">{msg.subject}</p> : null}
                         <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
                         <p className="text-xs opacity-50 mt-2">{new Date(msg.created_at).toLocaleString()}</p>
+                        {msg.direction === "inbound" && !msg.summary ? (
+                          <Button size="sm" variant="outline" className="h-7 text-xs mt-2" disabled={sorting === msg.id} onClick={() => sortWithClaude(msg.id)}>
+                            {sorting === msg.id ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sparkles className="h-3 w-3 mr-1" />}
+                            {sorting === msg.id ? "Sorting… (up to 30s)" : "Sort with Claude"}
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   ))}
@@ -175,14 +180,17 @@ const Conversations = () => {
                           size="sm"
                           variant="ghost"
                           className="h-7 text-xs"
-                          onClick={() => applySuggestedReply(
-                            activeThread.messages.find((m) => m.ai_suggested_reply)?.ai_suggested_reply || ""
-                          )}
+                          onClick={() => applySuggestedReply(activeThread.messages.find((m) => m.ai_suggested_reply)!)}
                         >
                           Use this
                         </Button>
                       </div>
-                      <p className="text-sm text-muted-foreground">
+                      {activeThread.messages.find((m) => m.ai_suggested_reply)?.ai_suggested_subject ? (
+                        <p className="text-xs font-medium mb-1">
+                          {activeThread.messages.find((m) => m.ai_suggested_reply)?.ai_suggested_subject}
+                        </p>
+                      ) : null}
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                         {activeThread.messages.find((m) => m.ai_suggested_reply)?.ai_suggested_reply}
                       </p>
                     </div>
@@ -191,14 +199,23 @@ const Conversations = () => {
 
                 {/* Reply composer */}
                 <div className="p-4 border-t space-y-3">
+                  <Input
+                    placeholder="Subject (optional)"
+                    value={replySubject}
+                    onChange={(e) => setReplySubject(e.target.value)}
+                    className="text-sm"
+                  />
                   <Textarea
                     placeholder="Type your reply..."
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
-                    rows={3}
+                    rows={6}
                     className="text-sm"
                   />
-                  <div className="flex justify-end">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-muted-foreground">
+                      {activeThread.lead?.email ? `Emails ${activeThread.lead.email}. Only people who wrote to you can be replied to.` : "This lead has no email address."}
+                    </p>
                     <Button
                       onClick={sendReply}
                       disabled={sending || !replyText.trim()}

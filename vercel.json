@@ -5,5 +5,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "regions": ["iad1"],
+  "functions": {
+    "api/inbound/website.ts": { "maxDuration": 120 },
+    "api/fn/[name].ts": { "maxDuration": 120 }
+  },
   "rewrites": [{ "source": "/((?!api/|@|src/|node_modules/)[^.]*)", "destination": "/index.html" }]
 }
