@@ -1,11 +1,18 @@
+import { sendReply, sortConversation } from "../_lib/inbox.js";
 import { currentOperator, json } from "../_lib/session.js";
 
 /**
  * The endpoint behind the frontend's `supabase.functions.invoke(name)`. The old Deno edge functions
  * are being rebuilt here one at a time; until a function exists, the call fails with a clear message
- * instead of silently doing nothing. Nothing here sends email or messages yet.
+ * instead of silently doing nothing.
  */
-const handlers: Record<string, (body: unknown, operatorId: string) => Promise<unknown>> = {};
+type Body = Record<string, unknown>;
+const handlers: Record<string, (body: Body, operatorId: string) => Promise<unknown>> = {
+  // Emails a reply to someone who wrote to us first. See canReply() in _lib/inbox.ts.
+  "send-reply": (b, op) => sendReply({ lead_id: String(b.lead_id ?? ""), message: String(b.message ?? ""), subject: b.subject ? String(b.subject) : undefined }, op),
+  // Re-runs Claude on an inbound message whose first sort failed.
+  "sort-conversation": (b, op) => sortConversation(String(b.conversation_id ?? ""), op),
+};
 
 export async function POST(req: Request) {
   const op = currentOperator(req);
@@ -17,7 +24,7 @@ export async function POST(req: Request) {
     return json({ data: null, error: { message: `"${name}" is being rebuilt on the new backend and isn't available yet.` } }, 501);
   }
   try {
-    return json({ data: await handler(await req.json().catch(() => ({})), op.id), error: null });
+    return json({ data: await handler((await req.json().catch(() => ({}))) as Body, op.id), error: null });
   } catch (err) {
     console.error(`fn ${name}:`, err);
     return json({ data: null, error: { message: err instanceof Error ? err.message : "Function failed." } }, 500);
