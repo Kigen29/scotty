@@ -101,7 +101,7 @@ export async function recordEnquiry(e: Enquiry, operatorId: string) {
     await logEvent(operatorId, { kind: "error", summary: `Couldn't sort ${who}'s message: ${(err as Error).message}`, leadId: lead.id, conversationId: conv.id });
   }
 
-  const decision = await decideAndAct(conv.id, lead.id, triage, operatorId);
+  const decision = await decideAndAct(conv.id, lead.id, triage, operatorId, triage?.business ?? who);
   if (decision.action !== "skipped") {
     await alert({ name: who, email, business: triage?.business ?? null }, triage, decision).catch((err) => console.error("inbox: alert failed", err));
   }
@@ -109,7 +109,7 @@ export async function recordEnquiry(e: Enquiry, operatorId: string) {
 }
 
 /** Applies autoReplyDecision() to a freshly sorted inbound message, and sends when it says so. */
-async function decideAndAct(conversationId: string, leadId: string, triage: Triage | null, operatorId: string): Promise<Decision> {
+async function decideAndAct(conversationId: string, leadId: string, triage: Triage | null, operatorId: string, name: string): Promise<Decision> {
   const settings = await loadSettings(operatorId);
   const check = await canReply(leadId, operatorId);
   const [{ n }] = await q<{ n: number }>(
@@ -137,7 +137,6 @@ async function decideAndAct(conversationId: string, leadId: string, triage: Tria
     decision.action,
     decision.action === "auto_replied" ? null : decision.reason,
   ]);
-  const name = triage?.business ?? "the sender";
   await logEvent(operatorId, {
     kind: decision.action,
     summary:

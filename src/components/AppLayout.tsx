@@ -1,151 +1,163 @@
-import { NavLink, Outlet, useLocation } from "react-router-dom";
-import {
-  LayoutDashboard, Search, Mail, MessageSquare, BarChart3, Settings, Zap, Menu, X, GitBranch, ShieldCheck, Columns3, Sun, Moon,
-} from "lucide-react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
+import {
+  Activity, BarChart3, Columns3, GitBranch, Home, Inbox, LogOut, Mail, Menu, Moon, Search, Settings, ShieldCheck, Sun, Users,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useNotifications } from "@/hooks/useNotifications";
-import NotificationCenter from "@/components/NotificationCenter";
-import ProfileDropdown from "@/components/ProfileDropdown";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { useOverview, useThreads } from "@/lib/api";
 
-const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard", badgeKey: "activity" as const },
-  { to: "/discovery", icon: Search, label: "Discovery" },
-  { to: "/campaigns", icon: Mail, label: "Campaigns" },
-  { to: "/sequences", icon: GitBranch, label: "Sequences" },
-  { to: "/pipeline", icon: Columns3, label: "Pipeline", badgeKey: "assignments" as const },
-  { to: "/conversations", icon: MessageSquare, label: "Conversations" },
-  { to: "/reports", icon: BarChart3, label: "Reports" },
-  { to: "/deliverability", icon: ShieldCheck, label: "Deliverability" },
-  { to: "/settings", icon: Settings, label: "Settings" },
+type Item = { to: string; label: string; icon: typeof Home; end?: boolean };
+
+const WORK: Item[] = [
+  { to: "/", label: "Home", icon: Home, end: true },
+  { to: "/inbox", label: "Inbox", icon: Inbox },
+  { to: "/leads", label: "Leads", icon: Users },
+  { to: "/pipeline", label: "Pipeline", icon: Columns3 },
+  { to: "/discovery", label: "Discovery", icon: Search },
+];
+const SCOTTY: Item[] = [
+  { to: "/agent", label: "Agent", icon: Activity },
+  { to: "/reports", label: "Reports", icon: BarChart3 },
+];
+// Cold outreach is switched off until it has its own domain and a consent-first flow.
+const OUTREACH: Item[] = [
+  { to: "/campaigns", label: "Campaigns", icon: Mail },
+  { to: "/sequences", label: "Sequences", icon: GitBranch },
+  { to: "/deliverability", label: "Deliverability", icon: ShieldCheck },
 ];
 
-const pageTitles: Record<string, string> = {
-  "/": "Dashboard",
-  "/discovery": "Lead Discovery",
-  "/campaigns": "Campaigns",
-  "/sequences": "Sequences",
-  "/pipeline": "Pipeline",
-  "/conversations": "Conversations",
-  "/reports": "Reports",
-  "/deliverability": "Deliverability",
-  "/settings": "Settings",
-};
+function NavItem({ item, badge, dot, onClick }: { item: Item; badge?: number; dot?: string; onClick?: () => void }) {
+  return (
+    <NavLink
+      to={item.to}
+      end={item.end}
+      onClick={onClick}
+      className={({ isActive }) =>
+        cn(
+          "group flex h-8 items-center gap-2.5 rounded-md px-2 text-[13px] transition-colors",
+          isActive
+            ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+            : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+        )
+      }
+    >
+      <item.icon className="h-4 w-4 shrink-0 opacity-70" strokeWidth={1.75} />
+      <span className="flex-1 truncate">{item.label}</span>
+      {dot ? <span className={cn("h-1.5 w-1.5 rounded-full", dot)} /> : null}
+      {badge ? <span className="tabular rounded bg-warning/15 px-1.5 text-[11px] font-medium text-warning">{badge}</span> : null}
+    </NavLink>
+  );
+}
+
+function Group({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-px">
+      <p className="px-2 pb-1 pt-4 text-[11px] font-medium text-sidebar-foreground/60">{label}</p>
+      {children}
+    </div>
+  );
+}
 
 const AppLayout = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { unreadActivity, newAssignments, markActivitySeen, markAssignmentsSeen } = useNotifications();
+  const [open, setOpen] = useState(false);
   const { theme, setTheme } = useTheme();
+  const { user } = useAuth();
+  const threads = useThreads();
+  const overview = useOverview();
 
-  useEffect(() => {
-    if (location.pathname === "/") markActivitySeen();
-    if (location.pathname === "/pipeline") markAssignmentsSeen();
-  }, [location.pathname, markActivitySeen, markAssignmentsSeen]);
+  useEffect(() => setOpen(false), [location.pathname]);
 
-  const getBadgeCount = (key?: "activity" | "assignments") => {
-    if (key === "activity") return unreadActivity;
-    if (key === "assignments") return newAssignments;
-    return 0;
+  const needsYou = threads.data?.filter((t) => t.state === "needs_you").length ?? 0;
+  const autoOn = overview.data?.auto_reply_enabled;
+  const close = isMobile ? () => setOpen(false) : undefined;
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
   };
-
-  const closeSidebar = () => {
-    if (isMobile) setSidebarOpen(false);
-  };
-
-  const pageTitle = pageTitles[location.pathname] || "Scotty";
 
   return (
     <div className="flex h-screen bg-background">
-      {/* Mobile overlay */}
-      {isMobile && sidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setSidebarOpen(false)} />
-      )}
+      {isMobile && open ? <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setOpen(false)} /> : null}
 
-      {/* Sidebar — clean nav only */}
-      <aside className={cn(
-        "flex-shrink-0 bg-sidebar-background border-r border-sidebar-border flex flex-col z-50 transition-transform duration-200",
-        isMobile
-          ? `fixed inset-y-0 left-0 w-56 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`
-          : "w-56 relative"
-      )}>
-        <div className="p-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <Zap className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="font-bold text-sidebar-foreground text-sm leading-tight">Scotty</h1>
-              <p className="text-[10px] text-sidebar-foreground/50">Lead Autopilot</p>
-            </div>
-          </div>
-          {isMobile && (
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-sidebar-foreground" onClick={() => setSidebarOpen(false)}>
-              <X className="h-4 w-4" />
-            </Button>
-          )}
+      <aside
+        className={cn(
+          "z-50 flex w-56 shrink-0 flex-col border-r bg-sidebar-background",
+          isMobile ? cn("fixed inset-y-0 left-0 transition-transform duration-200", open ? "translate-x-0" : "-translate-x-full") : "relative",
+        )}
+      >
+        <div className="flex h-12 items-center gap-2 px-4">
+          <span className="h-2 w-2 rounded-sm bg-primary" />
+          <span className="text-[14px] font-semibold tracking-tight">Scotty</span>
+          <span className="text-[12px] text-sidebar-foreground/60">Code 5</span>
         </div>
 
-        <nav className="flex-1 px-2 space-y-0.5 mt-2">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/"}
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-sidebar-accent text-sidebar-primary border-l-2 border-sidebar-primary"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )
-              }
-            >
-              <item.icon className="h-[18px] w-[18px]" />
-              <span className="flex-1">{item.label}</span>
-              {item.badgeKey && getBadgeCount(item.badgeKey) > 0 && (
-                <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground px-1.5">
-                  {getBadgeCount(item.badgeKey) > 99 ? "99+" : getBadgeCount(item.badgeKey)}
-                </span>
-              )}
-            </NavLink>
-          ))}
+        <nav className="flex-1 overflow-y-auto px-2 pb-4">
+          <div className="space-y-px">
+            {WORK.map((item) => (
+              <NavItem key={item.to} item={item} onClick={close} badge={item.to === "/inbox" ? needsYou : undefined} />
+            ))}
+          </div>
+          <Group label="Scotty">
+            {SCOTTY.map((item) => (
+              <NavItem
+                key={item.to}
+                item={item}
+                onClick={close}
+                dot={item.to === "/agent" && autoOn !== undefined ? (autoOn ? "bg-primary" : "bg-muted-foreground/40") : undefined}
+              />
+            ))}
+          </Group>
+          <Group label="Outreach · paused">
+            {OUTREACH.map((item) => (
+              <NavItem key={item.to} item={item} onClick={close} />
+            ))}
+          </Group>
         </nav>
+
+        <div className="space-y-px border-t px-2 py-2">
+          <NavItem item={{ to: "/settings", label: "Settings", icon: Settings }} onClick={close} />
+          <div className="flex items-center gap-1 px-2 pt-1">
+            <span className="flex-1 truncate text-[12px] text-sidebar-foreground/70" title={user?.email}>
+              {user?.email}
+            </span>
+            <button
+              className="rounded p-1.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              title="Switch theme"
+              aria-label="Switch theme"
+            >
+              <Sun className="h-3.5 w-3.5 dark:hidden" />
+              <Moon className="hidden h-3.5 w-3.5 dark:block" />
+            </button>
+            <button
+              className="rounded p-1.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              onClick={signOut}
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
       </aside>
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Header Bar */}
-        <header className="flex items-center justify-between h-14 px-4 border-b border-border bg-card shrink-0">
-          <div className="flex items-center gap-3">
-            {isMobile && (
-              <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setSidebarOpen(true)}>
-                <Menu className="h-5 w-5" />
-              </Button>
-            )}
-            <h2 className="text-base font-semibold">{pageTitle}</h2>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {isMobile ? (
+          <div className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
+            <button className="rounded p-1.5 hover:bg-muted" onClick={() => setOpen(true)} aria-label="Open menu">
+              <Menu className="h-4 w-4" />
+            </button>
+            <span className="text-[14px] font-semibold">Scotty</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              title="Toggle theme"
-            >
-              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            </Button>
-            <NotificationCenter />
-            <ProfileDropdown />
-          </div>
-        </header>
-
+        ) : null}
         <main className="flex-1 overflow-auto">
           <Outlet />
         </main>

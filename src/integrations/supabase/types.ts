@@ -96,6 +96,39 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_events: {
+        Row: {
+          conversation_id: string | null
+          created_at: string
+          details: Json
+          id: string
+          kind: string
+          lead_id: string | null
+          summary: string
+          user_id: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string
+          details?: Json
+          id?: string
+          kind: string
+          lead_id?: string | null
+          summary: string
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string
+          details?: Json
+          id?: string
+          kind?: string
+          lead_id?: string | null
+          summary?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
           ai_suggested_reply: string | null

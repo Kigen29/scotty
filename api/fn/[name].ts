@@ -1,4 +1,5 @@
 import { sendReply, sortConversation } from "../_lib/inbox.js";
+import { overview, threads } from "../_lib/views.js";
 import { currentOperator, json } from "../_lib/session.js";
 
 /**
@@ -12,6 +13,9 @@ const handlers: Record<string, (body: Body, operatorId: string) => Promise<unkno
   "send-reply": (b, op) => sendReply({ lead_id: String(b.lead_id ?? ""), message: String(b.message ?? ""), subject: b.subject ? String(b.subject) : undefined }, op),
   // Re-runs Claude on an inbound message whose first sort failed.
   "sort-conversation": (b, op) => sortConversation(String(b.conversation_id ?? ""), op),
+  // Read models for the Inbox and Home screens.
+  threads: (_b, op) => threads(op),
+  overview: (_b, op) => overview(op),
 };
 
 export async function POST(req: Request) {

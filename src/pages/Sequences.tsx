@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
+import { OutreachPaused } from "@/components/scotty/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -595,10 +596,10 @@ const Sequences = () => {
       <div className="p-6 space-y-4 max-w-3xl">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-lg font-semibold tracking-tight">
               {editing.id ? "Edit Sequence" : "New Sequence"}
             </h1>
-            <p className="text-sm text-muted-foreground">Define the email steps AI will send</p>
+            <p className="text-[13px] text-muted-foreground">Define the email steps AI will send</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => { setEditing(null); setShowAiForm(false); }}>Cancel</Button>
@@ -852,10 +853,11 @@ const Sequences = () => {
   // List view
   return (
     <div className="p-6 space-y-6 max-w-4xl">
+      <OutreachPaused />
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Sequences</h1>
-          <p className="text-sm text-muted-foreground">Multi-step email sequences for automated outreach</p>
+          <h1 className="text-lg font-semibold tracking-tight">Sequences</h1>
+          <p className="text-[13px] text-muted-foreground">Multi-step email sequences for automated outreach</p>
         </div>
         <Button
           size="sm"

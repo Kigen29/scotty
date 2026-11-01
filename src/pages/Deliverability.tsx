@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
+import { OutreachPaused } from "@/components/scotty/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import {
@@ -118,9 +119,10 @@ const Deliverability = () => {
 
   return (
     <div className="p-4 md:p-6 space-y-8">
+      <OutreachPaused />
       <div>
-        <h1 className="text-xl md:text-2xl font-bold">Deliverability</h1>
-        <p className="text-sm text-muted-foreground">Email health, open/bounce tracking, and A/B test results</p>
+        <h1 className="text-lg font-semibold tracking-tight">Deliverability</h1>
+        <p className="text-[13px] text-muted-foreground">Email health, open/bounce tracking, and A/B test results</p>
       </div>
 
       {/* Hero Metrics */}

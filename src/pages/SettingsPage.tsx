@@ -12,7 +12,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Save, Plus, X, Briefcase, Instagram, MessageCircle, Cpu, Search, Key, CalendarDays, Users, User, Mail, Zap, Target, AlertTriangle } from "lucide-react";
 import { ICPProfileCard } from "@/components/settings/ICPProfileCard";
-import TeamSettings from "@/components/settings/TeamSettings";
 
 interface PortfolioProject {
   url: string;
@@ -138,23 +137,23 @@ const SettingsPage = () => {
 
   return (
     <div className="p-6 space-y-6 max-w-4xl">
-      <div className="flex items-center justify-between">
+      <div className="flex items-end justify-between border-b pb-4">
         <div>
-          <p className="text-sm text-muted-foreground">Configure your outreach system</p>
+          <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
+          <p className="text-[13px] text-muted-foreground">Your studio details, what Scotty says in replies, and what it's allowed to do.</p>
         </div>
         <Button onClick={saveSettings} disabled={loading} size="sm">
-          <Save className="h-4 w-4 mr-1" /> {loading ? "Saving..." : "Save All"}
+          <Save /> {loading ? "Saving…" : "Save"}
         </Button>
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6 h-10">
+        <TabsList className="h-9">
           <TabsTrigger value="profile" className="text-xs gap-1.5"><User className="h-3.5 w-3.5" /> Profile</TabsTrigger>
           <TabsTrigger value="portfolio" className="text-xs gap-1.5"><Briefcase className="h-3.5 w-3.5" /> Portfolio</TabsTrigger>
           <TabsTrigger value="discovery" className="text-xs gap-1.5"><Target className="h-3.5 w-3.5" /> Discovery</TabsTrigger>
           <TabsTrigger value="email" className="text-xs gap-1.5"><Mail className="h-3.5 w-3.5" /> Email</TabsTrigger>
           <TabsTrigger value="automation" className="text-xs gap-1.5"><Zap className="h-3.5 w-3.5" /> Automation</TabsTrigger>
-          <TabsTrigger value="team" className="text-xs gap-1.5"><Users className="h-3.5 w-3.5" /> Team</TabsTrigger>
         </TabsList>
 
         {/* Profile Tab */}
@@ -185,7 +184,7 @@ const SettingsPage = () => {
               <div className="space-y-1.5">
                 <Label className="text-xs">Portfolio Links</Label>
                 <AddField value={newPortfolio} onChange={setNewPortfolio} onAdd={() => addToList("portfolio_links", newPortfolio, setNewPortfolio)} placeholder="https://example.com" />
-                <TagList items={settings.portfolio_links} onRemove={(i) => removeFromList("portfolio_links", i)} colorClass="bg-accent/20 text-accent-foreground" />
+                <TagList items={settings.portfolio_links} onRemove={(i) => removeFromList("portfolio_links", i)} colorClass="bg-warning/15 text-warning" />
               </div>
 
               <div className="space-y-1.5">
@@ -393,20 +392,6 @@ const SettingsPage = () => {
           </Card>
         </TabsContent>
 
-        {/* Team Tab */}
-        <TabsContent value="team">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Users className="h-4 w-4" /> Team
-              </CardTitle>
-              <CardDescription>Manage your team, invite members, and assign roles</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <TeamSettings />
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );
