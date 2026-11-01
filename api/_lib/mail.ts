@@ -1,7 +1,7 @@
 /**
  * Email through Resend, for alerts to the studio and replies to people who wrote to us first.
  * Resend's acceptable use policy forbids cold outreach, so nothing may use this to start a conversation:
- * see canReply() in replies.ts. Outreach will get its own domain and mailboxes.
+ * see canReply() in inbox.ts. First emails to businesses go from the outreach mailbox instead (smtp.ts).
  *
  * Env:
  *   RESEND_API_KEY  required

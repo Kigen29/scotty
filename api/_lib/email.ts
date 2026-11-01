@@ -8,6 +8,9 @@ const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** `reply+<lead id>@<domain>`: replies to Scotty's emails come back here and land on the right lead. */
+/** The public audit page for a lead. */
+export const reportUrl = (token: string) => `${(process.env.REPORT_BASE_URL ?? "https://code5developers.com/r").replace(/\/$/, "")}/${token}`;
+
 export const replyAddress = (leadId: string, domain: string) => `reply+${leadId}@${domain}`;
 
 export function leadIdFromAddresses(addresses: string[], domain: string): string | null {

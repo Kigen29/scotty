@@ -2,7 +2,7 @@ import { sendReply, sortConversation } from "../_lib/inbox.js";
 import { overview, threads } from "../_lib/views.js";
 import { discover, placesRequestsThisMonth } from "../_lib/discovery.js";
 import { sortDiscoveries } from "../_lib/qualify.js";
-import { logCall, prepareCall, sendReportEmail, type CallOutcome } from "../_lib/outreach.js";
+import { logCall, prepareCall, sendReportEmail, sendFirstEmail, outreachUsage, type CallOutcome } from "../_lib/outreach.js";
 import { callList } from "../_lib/calls.js";
 import { currentOperator, json } from "../_lib/session.js";
 
@@ -38,6 +38,9 @@ const handlers: Record<string, (body: Body, operatorId: string) => Promise<unkno
       op,
     ),
   "send-report-email": (b, op) => sendReportEmail(String(b.lead_id ?? ""), op),
+  // The first email from the outreach mailbox, within the daily limit.
+  "send-first-email": (b, op) => sendFirstEmail(String(b.lead_id ?? ""), op),
+  "outreach-usage": (_b, op) => outreachUsage(op),
   // Read models for the Inbox and Home screens.
   threads: (_b, op) => threads(op),
   overview: (_b, op) => overview(op),
