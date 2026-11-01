@@ -1,11 +1,12 @@
+import { autoReplyDecision, type Decision } from "./autoreply.js";
 import { sql } from "./db.js";
 import { escapeHtml, mailConfigured, sendMail, studioInboxes, textToHtml, DEFAULT_INBOX } from "./mail.js";
 import { triageConfigured, triageMessage, type StudioSettings, type Triage } from "./triage.js";
 
 /**
- * The shared inbox. Messages from people (website enquiries now, email replies and WhatsApp next)
- * land in scotty.conversations against their lead, get sorted by Claude, and are answered only when
- * the operator presses Send.
+ * The shared inbox. Messages from people (website enquiries now, email replies and WhatsApp next) land in
+ * scotty.conversations against their lead. Claude sorts each one and drafts a reply; autoReplyDecision()
+ * sends it or holds it for the operator; every step is written to scotty.agent_events.
  */
 
 type Row = Record<string, unknown>;
@@ -24,22 +25,36 @@ export type Enquiry = {
 
 const appUrl = () => (process.env.APP_URL ?? "https://scotty.code5developers.com").replace(/\/$/, "");
 
-async function loadSettings(operatorId: string): Promise<StudioSettings> {
-  const [s] = await q<StudioSettings>(
-    "SELECT company_name, company_website, services, booking_link, portfolio_projects FROM scotty.settings WHERE user_id = $1::uuid",
+type Settings = StudioSettings & { auto_reply_enabled: boolean };
+
+async function loadSettings(operatorId: string): Promise<Settings> {
+  const [s] = await q<Settings>(
+    "SELECT company_name, company_website, services, booking_link, portfolio_projects, auto_reply_enabled FROM scotty.settings WHERE user_id = $1::uuid",
     [operatorId],
   );
-  return s ?? { company_name: null, company_website: null, services: null, booking_link: null, portfolio_projects: null };
+  return s ?? { company_name: null, company_website: null, services: null, booking_link: null, portfolio_projects: null, auto_reply_enabled: true };
 }
 
-/** Records a website enquiry, sorts it with Claude, and alerts the studio. */
+/** One line in the Agent activity log. */
+export async function logEvent(
+  operatorId: string,
+  e: { kind: string; summary: string; leadId?: string | null; conversationId?: string | null; details?: Record<string, unknown> },
+) {
+  await q(
+    `INSERT INTO scotty.agent_events (user_id, lead_id, conversation_id, kind, summary, details)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6::jsonb)`,
+    [operatorId, e.leadId ?? null, e.conversationId ?? null, e.kind, e.summary, JSON.stringify(e.details ?? {})],
+  );
+}
+
+/** Records a website enquiry, sorts it, replies on its own when that's safe, and tells the studio. */
 export async function recordEnquiry(e: Enquiry, operatorId: string) {
   const email = e.email.trim().toLowerCase();
   const details = [e.service && `Service: ${e.service}`, e.budget && `Budget: ${e.budget}`].filter(Boolean).join(" · ");
 
   // One lead per person: an outreach lead who fills in the form joins their existing thread.
-  let [lead] = await q<{ id: string; business_name: string; status: string }>(
-    "SELECT id, business_name, status FROM scotty.leads WHERE user_id = $1::uuid AND lower(email) = $2 ORDER BY created_at LIMIT 1",
+  let [lead] = await q<{ id: string; business_name: string }>(
+    "SELECT id, business_name FROM scotty.leads WHERE user_id = $1::uuid AND lower(email) = $2 ORDER BY created_at LIMIT 1",
     [operatorId, email],
   );
   const isNew = !lead;
@@ -47,7 +62,7 @@ export async function recordEnquiry(e: Enquiry, operatorId: string) {
     [lead] = await q(
       `INSERT INTO scotty.leads (user_id, business_name, email, phone, status, discovery_source, verification_state, has_website, notes)
        VALUES ($1::uuid, $2, $3, $4, 'interested', 'website', 'verified', NULL, $5)
-       RETURNING id, business_name, status`,
+       RETURNING id, business_name`,
       [operatorId, e.name.trim() || email, email, e.phone?.trim() || null, details ? `Website enquiry. ${details}` : "Website enquiry."],
     );
   } else {
@@ -70,22 +85,72 @@ export async function recordEnquiry(e: Enquiry, operatorId: string) {
   );
   if (!conv) return { leadId: lead.id, duplicate: true as const };
 
-  await q("INSERT INTO scotty.activity_logs (user_id, action, details) VALUES ($1::uuid, 'website_enquiry', $2::jsonb)", [
-    operatorId,
-    JSON.stringify({ lead_id: lead.id, conversation_id: conv.id, new_lead: isNew }),
-  ]);
+  const who = e.name.trim() || email;
+  await logEvent(operatorId, {
+    kind: "received",
+    summary: `New website enquiry from ${who}${isNew ? " (new lead)" : ""}`,
+    leadId: lead.id,
+    conversationId: conv.id,
+  });
 
   let triage: Triage | null = null;
   try {
     triage = await sortConversation(conv.id, operatorId, { renameNewLead: isNew });
   } catch (err) {
     console.error("inbox: triage failed", err);
+    await logEvent(operatorId, { kind: "error", summary: `Couldn't sort ${who}'s message: ${(err as Error).message}`, leadId: lead.id, conversationId: conv.id });
   }
 
-  if (triage?.category !== "spam") await alert({ name: e.name, email, business: triage?.business ?? null }, triage).catch((err) =>
-    console.error("inbox: alert failed", err),
+  const decision = await decideAndAct(conv.id, lead.id, triage, operatorId);
+  if (decision.action !== "skipped") {
+    await alert({ name: who, email, business: triage?.business ?? null }, triage, decision).catch((err) => console.error("inbox: alert failed", err));
+  }
+  return { leadId: lead.id, conversationId: conv.id, triaged: Boolean(triage), action: decision.action };
+}
+
+/** Applies autoReplyDecision() to a freshly sorted inbound message, and sends when it says so. */
+async function decideAndAct(conversationId: string, leadId: string, triage: Triage | null, operatorId: string): Promise<Decision> {
+  const settings = await loadSettings(operatorId);
+  const check = await canReply(leadId, operatorId);
+  const [{ n }] = await q<{ n: number }>(
+    `SELECT count(*)::int AS n FROM scotty.conversations
+      WHERE lead_id = $1::uuid AND user_id = $2::uuid AND sent_by = 'auto' AND created_at > now() - interval '24 hours'`,
+    [leadId, operatorId],
   );
-  return { leadId: lead.id, conversationId: conv.id, triaged: Boolean(triage) };
+  let decision = autoReplyDecision(triage, {
+    enabled: settings.auto_reply_enabled,
+    canReply: check.ok ? { ok: true } : check,
+    autoRepliesLast24h: n,
+  });
+
+  if (decision.action === "auto_replied" && triage?.reply) {
+    try {
+      await sendReply({ lead_id: leadId, subject: triage.reply.subject, message: triage.reply.body }, operatorId, "auto");
+    } catch (err) {
+      decision = { action: "held", reason: `The automatic reply failed to send: ${(err as Error).message}` };
+    }
+  }
+
+  await q("UPDATE scotty.conversations SET agent_action = $3, agent_reason = $4 WHERE id = $1::uuid AND user_id = $2::uuid", [
+    conversationId,
+    operatorId,
+    decision.action,
+    decision.action === "auto_replied" ? null : decision.reason,
+  ]);
+  const name = triage?.business ?? "the sender";
+  await logEvent(operatorId, {
+    kind: decision.action,
+    summary:
+      decision.action === "auto_replied"
+        ? `Replied to ${name} automatically`
+        : decision.action === "held"
+          ? `Held ${name}'s message for you: ${decision.reason}`
+          : `Ignored a message as spam`,
+    leadId,
+    conversationId,
+    details: { category: triage?.category ?? null, urgency: triage?.urgency ?? null },
+  });
+  return decision;
 }
 
 /**
@@ -111,9 +176,9 @@ export async function sortConversation(conversationId: string, operatorId: strin
   if (!triage) throw new Error("Claude declined to sort this message.");
 
   await q(
-    `UPDATE scotty.conversations SET category = $3, urgency = $4, summary = $5, ai_suggested_subject = $6, ai_suggested_reply = $7
+    `UPDATE scotty.conversations SET category = $3, urgency = $4, summary = $5, ai_suggested_subject = $6, ai_suggested_reply = $7, needs_human = $8
       WHERE id = $1::uuid AND user_id = $2::uuid`,
-    [conversationId, operatorId, triage.category, triage.urgency, triage.summary, triage.reply?.subject ?? null, triage.reply?.body ?? null],
+    [conversationId, operatorId, triage.category, triage.urgency, triage.summary, triage.reply?.subject ?? null, triage.reply?.body ?? null, triage.needs_human],
   );
   // A new lead is named after the person until we learn the business's name.
   if (opts.renameNewLead && triage.business) {
@@ -122,21 +187,25 @@ export async function sortConversation(conversationId: string, operatorId: strin
   return triage;
 }
 
-async function alert(from: { name: string; email: string; business: string | null }, triage: Triage | null) {
+async function alert(from: { name: string; email: string; business: string | null }, triage: Triage | null, decision: Decision) {
   if (!mailConfigured()) return;
   const who = from.business ? `${from.name} (${from.business})` : from.name || from.email;
-  const link = `${appUrl()}/conversations`;
+  const link = `${appUrl()}/inbox`;
+  const replied = decision.action === "auto_replied";
   const lines = [
     triage?.summary ?? `${who} sent an enquiry through the website.`,
     triage?.suggested_package ? `Best fit: ${triage.suggested_package}` : null,
     "",
-    triage?.reply ? `Suggested reply, waiting in Scotty for you to check and send:\n\n${triage.reply.body}` : "No reply was drafted.",
+    replied
+      ? `Scotty replied automatically:\n\n${triage?.reply?.body ?? ""}`
+      : `Scotty held this for you: ${decision.action === "held" ? decision.reason : ""}.${triage?.reply ? `\n\nA draft is waiting in Scotty:\n\n${triage.reply.body}` : ""}`,
   ].filter((l): l is string => l !== null);
+  const tag = replied ? (triage?.urgency === "high" ? "Hot lead, replied" : "Replied") : "Needs you";
   await sendMail({
     to: studioInboxes(),
-    subject: `${triage?.urgency === "high" ? "Hot lead" : "New enquiry"}: ${who}`,
-    text: `${lines.join("\n")}\n\nOpen it in Scotty: ${link}`,
-    html: `${textToHtml(lines.join("\n"))}<p><a href="${escapeHtml(link)}">Open it in Scotty</a></p>`,
+    subject: `${tag}: ${who}`,
+    text: `${lines.join("\n")}\n\nOpen Scotty: ${link}`,
+    html: `${textToHtml(lines.join("\n"))}<p><a href="${escapeHtml(link)}">Open Scotty</a></p>`,
   });
 }
 
@@ -160,7 +229,7 @@ export async function canReply(leadId: string, operatorId: string) {
   return { ok: true as const, email: lead.email };
 }
 
-export async function sendReply(input: { lead_id: string; message: string; subject?: string }, operatorId: string) {
+export async function sendReply(input: { lead_id: string; message: string; subject?: string }, operatorId: string, sentBy: "operator" | "auto" = "operator") {
   const message = String(input.message ?? "").trim();
   if (!message) throw new Error("The reply is empty.");
   const check = await canReply(input.lead_id, operatorId);
@@ -182,13 +251,12 @@ export async function sendReply(input: { lead_id: string; message: string; subje
     text: message,
   });
   const [conv] = await q<{ id: string; created_at: string }>(
-    `INSERT INTO scotty.conversations (user_id, lead_id, direction, channel, subject, message, external_id)
-     VALUES ($1::uuid, $2::uuid, 'outbound', 'email', $3, $4, $5) RETURNING id, created_at`,
-    [operatorId, input.lead_id, subject, message, id],
+    `INSERT INTO scotty.conversations (user_id, lead_id, direction, channel, subject, message, external_id, sent_by)
+     VALUES ($1::uuid, $2::uuid, 'outbound', 'email', $3, $4, $5, $6) RETURNING id, created_at`,
+    [operatorId, input.lead_id, subject, message, id, sentBy],
   );
-  await q("INSERT INTO scotty.activity_logs (user_id, action, details) VALUES ($1::uuid, 'reply_sent', $2::jsonb)", [
-    operatorId,
-    JSON.stringify({ lead_id: input.lead_id, conversation_id: conv.id, email_id: id }),
-  ]);
+  if (sentBy === "operator") {
+    await logEvent(operatorId, { kind: "operator_replied", summary: "You sent a reply", leadId: input.lead_id, conversationId: conv.id, details: { email_id: id } });
+  }
   return conv;
 }

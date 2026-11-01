@@ -155,7 +155,11 @@ const Conversations = () => {
                           </span>
                           {msg.urgency ? <Badge variant={urgencyVariant(msg.urgency)} className="text-[10px] h-4 px-1">{msg.urgency}</Badge> : null}
                           {msg.category ? <span className="text-[10px] opacity-60">{msg.category.replace(/_/g, " ")}</span> : null}
+                          {msg.sent_by === "auto" ? <Badge variant="outline" className="text-[10px] h-4 px-1 border-current">Auto</Badge> : null}
                         </div>
+                        {msg.agent_action === "held" && msg.agent_reason ? (
+                          <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">Held for you: {msg.agent_reason}</p>
+                        ) : null}
                         {msg.summary ? <p className="text-xs italic opacity-75 mb-1">{msg.summary}</p> : null}
                         {msg.subject ? <p className="text-xs font-medium mb-1">{msg.subject}</p> : null}
                         <p className="text-sm whitespace-pre-wrap">{msg.message}</p>

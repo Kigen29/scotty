@@ -112,6 +112,10 @@ export type Database = {
           summary: string | null
           urgency: string | null
           user_id: string
+          sent_by: string | null
+          agent_action: string | null
+          agent_reason: string | null
+          needs_human: boolean | null
         }
         Insert: {
           ai_suggested_reply?: string | null
@@ -128,6 +132,10 @@ export type Database = {
           summary?: string | null
           urgency?: string | null
           user_id: string
+          sent_by?: string | null
+          agent_action?: string | null
+          agent_reason?: string | null
+          needs_human?: boolean | null
         }
         Update: {
           ai_suggested_reply?: string | null
@@ -144,6 +152,10 @@ export type Database = {
           summary?: string | null
           urgency?: string | null
           user_id?: string
+          sent_by?: string | null
+          agent_action?: string | null
+          agent_reason?: string | null
+          needs_human?: boolean | null
         }
         Relationships: [
           {
@@ -549,6 +561,7 @@ export type Database = {
       }
       settings: {
         Row: {
+          auto_reply_enabled: boolean
           active_hours_end: string | null
           active_hours_start: string | null
           booking_link: string | null
@@ -573,6 +586,7 @@ export type Database = {
           whatsapp_number: string | null
         }
         Insert: {
+          auto_reply_enabled?: boolean
           active_hours_end?: string | null
           active_hours_start?: string | null
           booking_link?: string | null
@@ -597,6 +611,7 @@ export type Database = {
           whatsapp_number?: string | null
         }
         Update: {
+          auto_reply_enabled?: boolean
           active_hours_end?: string | null
           active_hours_start?: string | null
           booking_link?: string | null
