@@ -1,8 +1,9 @@
 import { autoReplyDecision, type Decision } from "./autoreply.js";
-import { replyAddress, reportUrl } from "./email.js";
+import { isUnsubscribe, replyAddress, reportUrl } from "./email.js";
 import { sql } from "./db.js";
 import { escapeHtml, mailConfigured, sendMail, studioInboxes, textToHtml, DEFAULT_INBOX } from "./mail.js";
 import { outreachConfigured, sendOutreachMail } from "./smtp.js";
+import { SERVICE_WINDOW_MS, sendWhatsAppText, whatsappConfigured, whatsappDigits, type InboundWhatsApp } from "./whatsapp.js";
 import { triageConfigured, triageMessage, type StudioSettings, type Triage } from "./triage.js";
 
 /**
@@ -108,7 +109,7 @@ export async function recordEnquiry(e: Enquiry, operatorId: string) {
 
 /** Sort, decide, reply or hold, and tell the studio: the same for every inbound message, whatever the channel. */
 async function afterInbound(
-  m: { conversationId: string; leadId: string; who: string; email: string; isNew: boolean; channel: "website" | "email" },
+  m: { conversationId: string; leadId: string; who: string; email: string; isNew: boolean; channel: "website" | "email" | "whatsapp" },
   operatorId: string,
 ) {
   let triage: Triage | null = null;
@@ -199,6 +200,51 @@ export async function recordEmailReply(r: EmailReply, operatorId: string) {
   );
   await logEvent(operatorId, { kind: "received", summary: `${who} replied by email${isNew ? " (new lead)" : ""}`, leadId: lead.id, conversationId: conv.id });
   return afterInbound({ conversationId: conv.id, leadId: lead.id, who, email, isNew, channel: "email" }, operatorId);
+}
+
+/**
+ * Records a WhatsApp message to the studio's number and runs it through the same pipeline. Matched to a lead by phone
+ * number (last nine digits, so 07…, 2547… and +254 7… all match); someone new becomes a lead. "STOP" marks them
+ * don't-contact. A redelivered message is recorded once.
+ */
+export async function recordWhatsApp(m: InboundWhatsApp, operatorId: string) {
+  const tail = m.from.replace(/\D/g, "").slice(-9);
+  let [lead] = await q<{ id: string; business_name: string }>(
+    `SELECT id, business_name FROM scotty.leads
+      WHERE user_id = $1::uuid AND right(regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g'), 9) = $2 ORDER BY created_at LIMIT 1`,
+    [operatorId, tail],
+  );
+  const isNew = !lead;
+  if (!lead) {
+    [lead] = await q(
+      `INSERT INTO scotty.leads (user_id, business_name, phone, status, discovery_source, verification_state, has_website, notes)
+       VALUES ($1::uuid, $2, $3, 'interested', 'whatsapp', 'verified', NULL, 'Messaged on WhatsApp.')
+       RETURNING id, business_name`,
+      [operatorId, m.name?.trim() || `+${m.from}`, `+${m.from}`],
+    );
+  }
+
+  const [conv] = await q<{ id: string }>(
+    `INSERT INTO scotty.conversations (user_id, lead_id, direction, channel, subject, message, external_id)
+     VALUES ($1::uuid, $2::uuid, 'inbound', 'whatsapp', NULL, $3, $4)
+     ON CONFLICT (external_id) DO NOTHING RETURNING id`,
+    [operatorId, lead.id, m.text, `wa:${m.id}`],
+  );
+  if (!conv) return { leadId: lead.id, duplicate: true as const };
+
+  const who = m.name?.trim() || lead.business_name;
+  if (isUnsubscribe(m.text)) {
+    await q("UPDATE scotty.leads SET unsubscribed = true, status = 'not_interested' WHERE id = $1::uuid AND user_id = $2::uuid", [lead.id, operatorId]);
+    await q("UPDATE scotty.conversations SET agent_action = 'skipped', agent_reason = 'Asked not to be contacted' WHERE id = $1::uuid", [conv.id]);
+    await logEvent(operatorId, { kind: "skipped", summary: `${who} asked not to be contacted. Marked don't contact.`, leadId: lead.id, conversationId: conv.id });
+    return { leadId: lead.id, conversationId: conv.id, action: "skipped" as const };
+  }
+  await q(
+    "UPDATE scotty.leads SET status = CASE WHEN status IN ('discovered', 'qualified', 'contacted') THEN 'responded' ELSE status END WHERE id = $1::uuid AND user_id = $2::uuid",
+    [lead.id, operatorId],
+  );
+  await logEvent(operatorId, { kind: "received", summary: `${who} messaged on WhatsApp${isNew ? " (new lead)" : ""}`, leadId: lead.id, conversationId: conv.id });
+  return afterInbound({ conversationId: conv.id, leadId: lead.id, who, email: "", isNew, channel: "whatsapp" }, operatorId);
 }
 
 /** Applies autoReplyDecision() to a freshly sorted inbound message, and sends when it says so. */
@@ -307,13 +353,14 @@ export async function sortConversation(conversationId: string, operatorId: strin
   return triage;
 }
 
-async function alert(from: { name: string; email: string; business: string | null; channel: "website" | "email" }, triage: Triage | null, decision: Decision) {
+async function alert(from: { name: string; email: string; business: string | null; channel: "website" | "email" | "whatsapp" }, triage: Triage | null, decision: Decision) {
   if (!mailConfigured()) return;
   const who = from.business ? `${from.name} (${from.business})` : from.name || from.email;
   const link = `${appUrl()}/inbox`;
   const replied = decision.action === "auto_replied";
   const lines = [
-    triage?.summary ?? (from.channel === "email" ? `${who} replied by email.` : `${who} sent an enquiry through the website.`),
+    triage?.summary ??
+      (from.channel === "email" ? `${who} replied by email.` : from.channel === "whatsapp" ? `${who} messaged on WhatsApp.` : `${who} sent an enquiry through the website.`),
     triage?.suggested_package ? `Best fit: ${triage.suggested_package}` : null,
     "",
     replied
@@ -334,20 +381,32 @@ async function alert(from: { name: string; email: string; business: string | nul
  * (no cold outreach) and Kenya's consent rules for marketing. First emails go from the outreach mailbox (smtp.ts).
  */
 export async function canReply(leadId: string, operatorId: string) {
-  const [lead] = await q<{ email: string | null; unsubscribed: boolean | null; inbound: number; consent_at: string | null }>(
-    `SELECT l.email, l.unsubscribed, l.consent_at,
-            (SELECT count(*)::int FROM scotty.conversations c WHERE c.lead_id = l.id AND c.direction = 'inbound') AS inbound
-       FROM scotty.leads l WHERE l.id = $1::uuid AND l.user_id = $2::uuid`,
+  const [lead] = await q<{ email: string | null; phone: string | null; unsubscribed: boolean | null; inbound: number; consent_at: string | null; last_channel: string | null; last_at: string | null }>(
+    `SELECT l.email, l.phone, l.unsubscribed, l.consent_at,
+            (SELECT count(*)::int FROM scotty.conversations c WHERE c.lead_id = l.id AND c.direction = 'inbound') AS inbound,
+            li.channel AS last_channel, li.created_at AS last_at
+       FROM scotty.leads l
+       LEFT JOIN LATERAL (
+         SELECT channel, created_at FROM scotty.conversations c WHERE c.lead_id = l.id AND c.direction = 'inbound' ORDER BY created_at DESC LIMIT 1
+       ) li ON true
+      WHERE l.id = $1::uuid AND l.user_id = $2::uuid`,
     [leadId, operatorId],
   );
   if (!lead) return { ok: false as const, reason: "That lead wasn't found." };
-  if (!lead.email) return { ok: false as const, reason: "This lead has no email address." };
   if (lead.unsubscribed) return { ok: false as const, reason: "This person asked not to be contacted." };
+  // They last wrote on WhatsApp: answer there while WhatsApp allows a free-form reply.
+  if (lead.last_channel === "whatsapp") {
+    const to = whatsappDigits(lead.phone);
+    const open = lead.last_at && Date.now() - Date.parse(lead.last_at) < SERVICE_WINDOW_MS;
+    if (to && open && whatsappConfigured()) return { ok: true as const, channel: "whatsapp" as const, to };
+    if (!lead.email) return { ok: false as const, reason: "It's been over 24 hours since their last WhatsApp message, so WhatsApp won't allow a reply from Scotty. Reply from your phone." };
+  }
+  if (!lead.email) return { ok: false as const, reason: "This lead has no email address." };
   // They wrote to us, or agreed on a call to hear from us.
   if (!lead.inbound && !lead.consent_at) {
     return { ok: false as const, reason: "Scotty only replies to people who have written to you first. First emails go from the outreach mailbox." };
   }
-  return { ok: true as const, email: lead.email };
+  return { ok: true as const, channel: "email" as const, to: lead.email };
 }
 
 export async function sendReply(input: { lead_id: string; message: string; subject?: string }, operatorId: string, sentBy: "operator" | "auto" = "operator") {
@@ -355,6 +414,17 @@ export async function sendReply(input: { lead_id: string; message: string; subje
   if (!message) throw new Error("The reply is empty.");
   const check = await canReply(input.lead_id, operatorId);
   if (!check.ok) throw new Error(check.reason);
+
+  if (check.channel === "whatsapp") {
+    const id = await sendWhatsAppText(check.to, message);
+    const [conv] = await q<{ id: string; created_at: string }>(
+      `INSERT INTO scotty.conversations (user_id, lead_id, direction, channel, subject, message, external_id, sent_by)
+       VALUES ($1::uuid, $2::uuid, 'outbound', 'whatsapp', NULL, $3, $4, $5) RETURNING id, created_at`,
+      [operatorId, input.lead_id, message, id ? `wa:${id}` : null, sentBy],
+    );
+    if (sentBy === "operator") await logEvent(operatorId, { kind: "operator_replied", summary: "You replied on WhatsApp", leadId: input.lead_id, conversationId: conv.id });
+    return conv;
+  }
 
   const [last] = await q<{ subject: string | null; ai_suggested_subject: string | null }>(
     `SELECT subject, ai_suggested_subject FROM scotty.conversations
@@ -375,8 +445,8 @@ export async function sendReply(input: { lead_id: string; message: string; subje
 
   // Send first, record after: a failed send must never show up as a sent message.
   const id = viaOutreach
-    ? await sendOutreachMail({ to: check.email, subject, text: message, replyTo })
-    : await sendMail({ from: process.env.REPLY_FROM || process.env.MAIL_FROM, to: [check.email], replyTo, subject, text: message });
+    ? await sendOutreachMail({ to: check.to, subject, text: message, replyTo })
+    : await sendMail({ from: process.env.REPLY_FROM || process.env.MAIL_FROM, to: [check.to], replyTo, subject, text: message });
   const [conv] = await q<{ id: string; created_at: string }>(
     `INSERT INTO scotty.conversations (user_id, lead_id, direction, channel, subject, message, external_id, sent_by)
      VALUES ($1::uuid, $2::uuid, 'outbound', 'email', $3, $4, $5, $6) RETURNING id, created_at`,

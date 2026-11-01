@@ -86,7 +86,7 @@ export function CallPanel({ lead }: { lead: Lead }) {
   });
   const log = useMutation({
     mutationFn: () =>
-      action("log-call", {
+      action<{ audit_sent?: string | null; audit_error?: string | null }>("log-call", {
         lead_id: lead.id,
         outcome,
         note: note || undefined,
@@ -94,8 +94,10 @@ export function CallPanel({ lead }: { lead: Lead }) {
         consent: outcome === "interested" && consent,
         email: outcome === "interested" && consent && email.trim() ? email.trim() : undefined,
       }),
-    onSuccess: () => {
-      toast({ title: "Logged" });
+    onSuccess: (r: { audit_sent?: string | null; audit_error?: string | null }) => {
+      if (r?.audit_sent) toast({ title: "Logged, and the audit is on its way on WhatsApp" });
+      else if (r?.audit_error) toast({ title: "Logged, but the audit wasn't sent", description: r.audit_error, variant: "destructive" });
+      else toast({ title: "Logged" });
       setOutcome(null);
       setNote("");
       setFollowUp("");
@@ -105,14 +107,22 @@ export function CallPanel({ lead }: { lead: Lead }) {
   });
   const usage = useQuery({
     queryKey: ["outreach-usage"],
-    queryFn: () => action<{ sent_today: number; limit: number; configured: boolean }>("outreach-usage", {}),
-    enabled: !!lead.email && !!prepared,
+    queryFn: () => action<{ sent_today: number; limit: number; configured: boolean; whatsapp: boolean }>("outreach-usage", {}),
+    enabled: !!prepared,
   });
   const emailFirst = useMutation({
     mutationFn: () => action<{ sent_today: number; limit: number }>("send-first-email", { lead_id: lead.id }),
     onSuccess: (r) => {
       toast({ title: "Emailed from outreach@", description: `${r.sent_today} of ${r.limit} today. Their reply will land in the Inbox.` });
       qc.invalidateQueries({ queryKey: ["outreach-usage"] });
+      refresh();
+    },
+    onError: (e: Error) => toast({ title: "Not sent", description: e.message, variant: "destructive" }),
+  });
+  const waAudit = useMutation({
+    mutationFn: () => action("send-audit-whatsapp", { lead_id: lead.id }),
+    onSuccess: () => {
+      toast({ title: "Audit sent on WhatsApp" });
       refresh();
     },
     onError: (e: Error) => toast({ title: "Not sent", description: e.message, variant: "destructive" }),
@@ -222,7 +232,7 @@ export function CallPanel({ lead }: { lead: Lead }) {
           <div className="space-y-2 rounded-md bg-muted/40 p-2">
             <label className="flex items-start gap-2 text-[12px]">
               <Checkbox checked={consent} onCheckedChange={(c) => setConsent(c === true)} className="mt-0.5" />
-              <span>They said yes to receiving the audit. This is recorded as their consent to hear from you.</span>
+              <span>They said yes to receiving the audit on WhatsApp or email. This is recorded as their consent to hear from you.</span>
             </label>
             {consent ? <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Their email (optional)" className="h-8 text-[12px]" /> : null}
           </div>
@@ -242,7 +252,15 @@ export function CallPanel({ lead }: { lead: Lead }) {
           <p className="text-[12px] text-muted-foreground">They said yes {ago(lead.consent_at!)}. Send the audit:</p>
           <CopyBox label="Message with the link" text={sendText} />
           <div className="grid grid-cols-3 gap-1">
-            {wa ? (
+            {wa && usage.data?.whatsapp ? (
+              <button
+                disabled={waAudit.isPending}
+                onClick={() => waAudit.mutate()}
+                className="inline-flex h-8 items-center justify-center gap-1 rounded-md border text-[12px] hover:bg-muted/50 disabled:opacity-40"
+              >
+                <MessageSquare className="h-3.5 w-3.5" /> {waAudit.isPending ? "Sending…" : "WhatsApp"}
+              </button>
+            ) : wa ? (
               <a href={`https://wa.me/${wa}?text=${encodeURIComponent(sendText)}`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center justify-center gap-1 rounded-md border text-[12px] hover:bg-muted/50">
                 <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
               </a>

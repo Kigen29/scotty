@@ -19,6 +19,9 @@
     },
     "api/public/report.ts": {
       "maxDuration": 30
+    },
+    "api/inbound/whatsapp.ts": {
+      "maxDuration": 120
     }
   },
   "rewrites": [
