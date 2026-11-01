@@ -15,6 +15,7 @@ const KINDS: { id: string; label: string; dot: string }[] = [
   { id: "received", label: "Received", dot: "bg-muted-foreground/40" },
   { id: "operator_replied", label: "You replied", dot: "bg-foreground/50" },
   { id: "skipped", label: "Spam", dot: "bg-muted-foreground/20" },
+  { id: "discovered", label: "Discovery", dot: "bg-sky-500" },
   { id: "error", label: "Problems", dot: "bg-destructive" },
 ];
 const kind = (id: string) => KINDS.find((k) => k.id === id) ?? { id, label: id, dot: "bg-muted-foreground/40" };

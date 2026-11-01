@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 
 type Lead = Pick<Tables<"leads">, "id" | "business_name" | "email" | "phone" | "location" | "category" | "status" | "discovery_source" | "updated_at" | "created_at">;
 
-const SOURCE_LABEL: Record<string, string> = { website: "Website", manual: "Added by you", web: "Web search", firecrawl: "Web search" };
+const SOURCE_LABEL: Record<string, string> = { website: "Website", email: "Email", google_places: "Google Maps", manual: "Added by you", web: "Web search", firecrawl: "Web search" };
 const sourceLabel = (s: string | null) => (s ? (SOURCE_LABEL[s] ?? s.replace(/_/g, " ")) : "—");
 
 const select = "h-8 rounded-md border bg-background px-2 text-[12px]";
