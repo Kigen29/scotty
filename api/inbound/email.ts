@@ -23,19 +23,29 @@ type ReceivedEmail = {
   headers?: Record<string, string | string[]>;
 };
 
-const htmlToText = (html: string) =>
-  html
-    .replace(/<(style|script)[\s\S]*?<\/\1>/gi, "")
+/**
+ * Plain text from an HTML email. The result is stored and shown as text, never rendered as HTML. Tags are
+ * stripped until none remain, any stray angle brackets are dropped, and &amp; is decoded last so that
+ * "&amp;lt;" can't become "<".
+ */
+function htmlToText(html: string) {
+  let t = html
+    .replace(/<blockquote[\s\S]*?<\/blockquote\s*>/gi, "")
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|li|tr|h\d)>/gi, "\n")
-    .replace(/<blockquote[\s\S]*?<\/blockquote>/gi, "")
-    .replace(/<[^>]+>/g, "")
+    .replace(/<\/(p|div|li|tr|h\d)\s*>/gi, "\n");
+  let prev: string;
+  do {
+    prev = t;
+    t = t.replace(/<[^<>]*>/g, "");
+  } while (t !== prev);
+  return t
+    .replace(/[<>]/g, "")
     .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
+    .replace(/&(lt|gt);/g, "")
     .replace(/&#39;|&apos;/g, "'")
-    .replace(/&quot;/g, '"');
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
+}
 
 export async function POST(req: Request) {
   const secret = process.env.RESEND_WEBHOOK_SECRET;
