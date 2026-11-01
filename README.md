@@ -30,8 +30,9 @@ itchyfeet.co.ke.
 ## Stack
 
 - **Frontend** — React 18, Vite, TypeScript, Tailwind, shadcn/ui
-- **Backend** — Supabase: Postgres with row-level security, Auth, Realtime, Deno edge functions
-- **Scheduling** — `pg_cron` + `pg_net`
+- **Backend** — Vercel functions in `api/` on Neon Postgres (schema `scotty`, shared with code5developers.com). Moved off Lovable's managed Supabase in November 2026.
+- **Scheduling** — none while the old jobs are rebuilt; Vercel Cron when they return
+- **Legacy** — `supabase/` holds the old Deno edge functions and migrations, kept as the reference the rebuild ports from
 - **External** — Firecrawl (search and scrape), AI gateway and OpenAI (extraction, scoring, copy), Resend (email), Meta WhatsApp Cloud API
 
 ## Layout
@@ -42,10 +43,12 @@ src/
                   Sequences, Pipeline, Conversations, Reports, Deliverability, Settings
   components/     Shared UI; components/ui is shadcn
   hooks/          Auth, realtime subscriptions, notifications, team
-  integrations/   Generated Supabase client and types
-supabase/
-  functions/      Edge functions — discovery, qualification, sending, webhooks
-  migrations/     Schema and RLS policies
+  integrations/   Data client (Supabase-style API over Scotty's own endpoints) and table types
+api/
+  db.ts           Data endpoint; _lib/query.ts turns calls into scoped, parameterised SQL
+  auth.ts         Single-operator sign-in
+  fn/[name].ts    Actions (discovery, drafting, sending) as they are rebuilt
+supabase/         Legacy edge functions and migrations, the reference for the rebuild
 ```
 
 ## Running locally
@@ -54,7 +57,9 @@ Requires Node.js 20+.
 
 ```sh
 npm install
-npm run dev          # http://localhost:8080
+vercel link                    # once, to the "scotty" project
+vercel env pull .env.local     # server settings
+vercel dev                     # app + api on http://localhost:3000
 ```
 
 Other scripts:
@@ -68,22 +73,16 @@ npm run test:watch   # vitest, watch mode
 
 ## Configuration
 
-`.env` holds the Supabase connection for the frontend:
+The `api/` functions read their settings from the Vercel project; `.env.example` lists them.
+There is nothing secret in the frontend: it talks only to its own `/api`.
 
-```
-VITE_SUPABASE_URL
-VITE_SUPABASE_PROJECT_ID
-VITE_SUPABASE_PUBLISHABLE_KEY
-```
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Neon Postgres. Scotty's tables are in the `scotty` schema |
+| `OPERATOR_USER_ID`, `OPERATOR_EMAIL` | The single operator: owns every row, signs in with this email |
+| `SCOTTY_PASSWORD`, `SCOTTY_SECRET` | Sign-in password, and the key that signs the session cookie |
 
-Edge functions read their own secrets from the Supabase project, never from `.env`:
-`FIRECRAWL_API_KEY`, `OPENAI_API_KEY`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`,
-`WHATSAPP_BUSINESS_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`,
-`WHATSAPP_WEBHOOK_VERIFY_TOKEN`, and `CRON_SECRET`.
-
-> **Note:** `.env` points at the hosted Supabase project. A local dev server is a
-> frontend onto live production data — run `supabase start` if you want an isolated
-> database to work against.
+> **Note:** `vercel dev` runs against the live database. There is no separate dev copy yet.
 
 ## Documentation
 
@@ -113,7 +112,8 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before your first PR.
 
 ## Status
 
-Under active development. The outbound path (discover → score → compose → send → track)
-is working. Inbound email ingestion and automated reply handling are not yet wired, so
-the conversation half of the loop is incomplete. See the architecture review for the
-current findings and the phased plan.
+Rebuilding on Neon. Every screen reads and edits real data again, but the actions that ran as
+edge functions (discovery, drafting, sending, the outreach agent) are being ported to `api/fn`
+one at a time, and report that until they return. Nothing sends email meanwhile. Next: website
+enquiries flowing into Conversations, replies sent only after approval, then discovery from
+Google Places and permission-first outreach.
