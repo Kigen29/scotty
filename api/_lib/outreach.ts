@@ -355,7 +355,7 @@ export async function sendFirstEmail(leadId: string, operatorId: string) {
   const reply = replyAddress(leadId, process.env.INBOUND_DOMAIN);
   const subject = lead.report.email_subject || `A few things I noticed about ${lead.business_name} on Google`;
   const text = [lead.report.first_message, s?.email_signature, STOP_LINE].filter(Boolean).join("\n\n");
-  const id = await sendOutreachMail({ to: lead.email, subject, text, replyTo: reply, unsubscribe: `mailto:${reply}?subject=stop` });
+  const id = await sendOutreachMail({ to: lead.email, subject, text, replyTo: reply });
 
   await q(
     `INSERT INTO scotty.conversations (user_id, lead_id, direction, channel, subject, message, external_id, sent_by)
