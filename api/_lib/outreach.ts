@@ -7,6 +7,7 @@ import { logEvent } from "./inbox.js";
 import { escapeHtml, mailConfigured, sendMail, studioInboxes, textToHtml, DEFAULT_INBOX } from "./mail.js";
 import { replyAddress, reportUrl } from "./email.js";
 import { instagramConfigured, instagramFor } from "./instagram.js";
+import { sendWhatsAppTemplate, sendWhatsAppText, SERVICE_WINDOW_MS, whatsappConfigured, whatsappDigits } from "./whatsapp.js";
 import { outreachConfigured, outreachDailyLimit, sendOutreachMail } from "./smtp.js";
 import { PACKAGES } from "./triage.js";
 
@@ -19,14 +20,7 @@ import { PACKAGES } from "./triage.js";
 type Row = Record<string, unknown>;
 const q = async <T = Row>(text: string, values: unknown[] = []) => (await sql().query(text, values)) as T[];
 
-/** Kenyan numbers in any common format → digits for wa.me, e.g. "0719 587323" → "254719587323". */
-export function whatsappDigits(phone: string | null | undefined) {
-  const d = (phone ?? "").replace(/\D/g, "");
-  if (/^254\d{9}$/.test(d)) return d;
-  if (/^0[17]\d{8}$/.test(d)) return `254${d.slice(1)}`;
-  if (/^[17]\d{8}$/.test(d)) return `254${d}`;
-  return d.length >= 10 ? d : null;
-}
+export { whatsappDigits };
 
 /** "Adlife Plaza, 2nd floor Ring Rd Kilimani, Nairobi" → "Ring Rd Kilimani, Nairobi": the last two parts. */
 export function shortArea(address: string | null | undefined) {
@@ -295,7 +289,7 @@ export async function logCall(
        last_call_at = now(), last_call_outcome = $3, next_call_at = $4::timestamptz,
        status = CASE WHEN status IN ('converted') THEN status ELSE $5 END,
        consent_at = CASE WHEN $6 THEN coalesce(consent_at, now()) ELSE consent_at END,
-       consent_note = CASE WHEN $6 THEN 'Agreed on a call to receive the free report' ELSE consent_note END,
+       consent_note = CASE WHEN $6 THEN 'Agreed on a call to receive the free audit, on WhatsApp or email' ELSE consent_note END,
        email = coalesce($7, email),
        notes = CASE WHEN $8::text IS NULL THEN notes ELSE concat_ws(E'\\n', notes, $8::text) END
      WHERE id = $1::uuid AND user_id = $2::uuid RETURNING business_name`,
@@ -308,7 +302,63 @@ export async function logCall(
     leadId: input.lead_id,
     details: { outcome: input.outcome, consent: !!input.consent },
   });
-  return { ok: true, next_call_at: next };
+  // They said yes: send the audit on WhatsApp straight away, if it's written and WhatsApp is set up.
+  let audit_sent: "whatsapp" | null = null;
+  let audit_error: string | null = null;
+  if (input.consent && whatsappConfigured()) {
+    try {
+      await sendAuditWhatsApp(input.lead_id, operatorId, "auto");
+      audit_sent = "whatsapp";
+    } catch (err) {
+      audit_error = (err as Error).message;
+    }
+  }
+  return { ok: true, next_call_at: next, audit_sent, audit_error };
+}
+
+const AUDIT_TEMPLATE = () => process.env.WHATSAPP_AUDIT_TEMPLATE || "free_audit_ready";
+
+/**
+ * Sends the free audit on WhatsApp to someone who agreed to receive it. Within 24 hours of their last WhatsApp message
+ * it's the written send message; otherwise the approved template (Meta allows nothing else to start a chat).
+ */
+export async function sendAuditWhatsApp(leadId: string, operatorId: string, sentBy: "operator" | "auto" = "operator") {
+  const [lead] = await q<{ business_name: string; phone: string | null; consent_at: string | null; unsubscribed: boolean | null; report_token: string | null; report: Stored | null; last_wa: string | null }>(
+    `SELECT l.business_name, l.phone, l.consent_at, l.unsubscribed, l.report_token, l.report,
+            (SELECT max(created_at) FROM scotty.conversations c WHERE c.lead_id = l.id AND c.direction = 'inbound' AND c.channel = 'whatsapp') AS last_wa
+       FROM scotty.leads l WHERE l.id = $1::uuid AND l.user_id = $2::uuid`,
+    [leadId, operatorId],
+  );
+  if (!lead) throw new Error("That lead wasn't found.");
+  if (lead.unsubscribed) throw new Error("This person asked not to be contacted.");
+  const to = whatsappDigits(lead.phone);
+  if (!to) throw new Error("There's no phone number for this lead.");
+  const open = lead.last_wa && Date.now() - Date.parse(lead.last_wa) < SERVICE_WINDOW_MS;
+  if (!lead.consent_at && !open) throw new Error("Only send the audit to someone who said yes. Log it as Said yes and tick that they agreed.");
+  if (!lead.report_token || !lead.report?.audit) throw new Error("Write the first message and audit first.");
+
+  const url = reportUrl(lead.report_token);
+  let text: string;
+  let id: string | null;
+  if (open) {
+    text = `${lead.report.send_message}\n\n${url}`;
+    id = await sendWhatsAppText(to, text);
+  } else {
+    const [me] = await q<{ name: string | null }>(
+      "SELECT coalesce(p.display_name, s.company_name) AS name FROM scotty.settings s LEFT JOIN scotty.profiles p ON p.id = s.user_id WHERE s.user_id = $1::uuid",
+      [operatorId],
+    );
+    const caller = me?.name?.trim().split(/\s+/)[0] || "Emmanuel";
+    id = await sendWhatsAppTemplate(to, AUDIT_TEMPLATE(), [caller, lead.business_name, url]);
+    text = `Hi, it's ${caller} from Code 5 Developers. As promised, here's the free audit of how ${lead.business_name} shows up online: ${url}\n\nReply here with any questions, or STOP if you'd rather not hear from us.`;
+  }
+  await q(
+    `INSERT INTO scotty.conversations (user_id, lead_id, direction, channel, subject, message, external_id, sent_by)
+     VALUES ($1::uuid, $2::uuid, 'outbound', 'whatsapp', NULL, $3, $4, $5)`,
+    [operatorId, leadId, text, id ? `wa:${id}` : null, sentBy],
+  );
+  await logEvent(operatorId, { kind: "report_sent", summary: `Sent the free audit to ${lead.business_name} on WhatsApp`, leadId });
+  return { ok: true };
 }
 
 /** Emails the report, only to someone who agreed to receive it on a call. */
@@ -351,7 +401,7 @@ export async function outreachUsage(operatorId: string) {
         AND created_at >= date_trunc('day', now() AT TIME ZONE 'Africa/Nairobi') AT TIME ZONE 'Africa/Nairobi'`,
     [operatorId],
   );
-  return { sent_today: n, limit: outreachDailyLimit(), configured: outreachConfigured() };
+  return { sent_today: n, limit: outreachDailyLimit(), configured: outreachConfigured(), whatsapp: whatsappConfigured() };
 }
 
 /**

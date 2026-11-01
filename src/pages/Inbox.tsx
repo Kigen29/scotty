@@ -48,6 +48,8 @@ function ThreadList({ threads, selected, onSelect }: { threads: Thread[]; select
   );
 }
 
+const CHANNEL: Record<string, string> = { email: "email", website: "website form", whatsapp: "WhatsApp" };
+
 function MessageItem({ m, leadName }: { m: Message; leadName: string }) {
   const inbound = m.direction === "inbound";
   const who = inbound ? leadName : m.sent_by === "auto" ? "Scotty (automatic reply)" : "You";
@@ -55,7 +57,7 @@ function MessageItem({ m, leadName }: { m: Message; leadName: string }) {
     <article className={cn("border-l-2 py-1 pl-4", inbound ? "border-border" : m.sent_by === "auto" ? "border-primary/60" : "border-foreground/30")}>
       <header className="flex flex-wrap items-baseline gap-x-2 text-[12px] text-muted-foreground">
         <span className="font-medium text-foreground">{who}</span>
-        <span>{m.channel}</span>
+        <span>{CHANNEL[m.channel] ?? m.channel}</span>
         <span title={fullDate(m.created_at)}>{ago(m.created_at)}</span>
         {m.category ? <span>· {m.category.replace(/_/g, " ")}</span> : null}
         {m.urgency === "high" ? <span className="font-medium text-destructive">· urgent</span> : null}
