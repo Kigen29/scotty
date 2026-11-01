@@ -36,6 +36,7 @@ export type Overview = {
   median_reply_minutes: number | null;
   pipeline: { status: string; n: number }[];
   auto_reply_enabled: boolean;
+  auto_qualify_enabled: boolean;
 };
 
 export type AgentEvent = Tables<"agent_events"> & { leads?: { business_name: string } | null };

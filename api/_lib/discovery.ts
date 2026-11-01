@@ -1,6 +1,7 @@
 import { sql } from "./db.js";
 import { logEvent } from "./inbox.js";
 import { domainGuesses, prospectScore, websiteKind, type WebsiteKind } from "./prospect.js";
+import { sortDiscoveries } from "./qualify.js";
 
 /**
  * Finds real Kenyan businesses on Google Places (Text Search, New) and keeps the ones without a real website.
@@ -99,8 +100,8 @@ export async function discover(input: { category?: string; location?: string; qu
   }
   const cleared = await clearStale(operatorId);
 
-  const [settings] = await q<{ target_categories: string[] | null; target_locations: string[] | null }>(
-    "SELECT target_categories, target_locations FROM scotty.settings WHERE user_id = $1::uuid",
+  const [settings] = await q<{ target_categories: string[] | null; target_locations: string[] | null; auto_qualify_enabled: boolean }>(
+    "SELECT target_categories, target_locations, auto_qualify_enabled FROM scotty.settings WHERE user_id = $1::uuid",
     [operatorId],
   );
   const targets = {
@@ -181,5 +182,19 @@ export async function discover(input: { category?: string; location?: string; qu
     summary,
     details: { query: textQuery, requests, found: places.length, added, already_known: alreadyKnown, with_website: withWebsite, closed, cleared },
   });
-  return { query: textQuery, found: places.length, added, already_known: alreadyKnown, with_website: withWebsite, closed, cleared, requests_this_month: used + requests, monthly_limit: monthlyLimit() };
+  // Let Scotty sort the new finds into qualified and dismissed, unless that's switched off.
+  let sorted: { qualified: number; dismissed: number } | null = null;
+  if (added && (settings?.auto_qualify_enabled ?? true)) {
+    try {
+      sorted = await sortDiscoveries(operatorId);
+    } catch (err) {
+      console.error("discovery: sorting failed", err);
+      await logEvent(operatorId, { kind: "error", summary: `Couldn't sort the new discoveries: ${(err as Error).message}` });
+    }
+  }
+  return {
+    query: textQuery, found: places.length, added, already_known: alreadyKnown, with_website: withWebsite, closed, cleared,
+    qualified: sorted?.qualified ?? null, dismissed: sorted?.dismissed ?? null,
+    requests_this_month: used + requests, monthly_limit: monthlyLimit(),
+  };
 }

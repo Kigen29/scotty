@@ -13,8 +13,8 @@ import { cn } from "@/lib/utils";
 
 type Lead = Tables<"leads">;
 type Usage = { used: number; limit: number; configured: boolean };
-type Result = { query: string; found: number; added: number; already_known: number; with_website: number; closed: number };
-type Analysis = { website?: "none" | "social"; listed_url?: string | null; registered_domain?: string | null };
+type Result = { query: string; found: number; added: number; already_known: number; with_website: number; closed: number; qualified: number | null; dismissed: number | null };
+type Analysis = { website?: "none" | "social"; listed_url?: string | null; registered_domain?: string | null; agent_decision?: string; agent_reason?: string };
 
 const VIEWS = [
   { id: "discovered", label: "New" },
@@ -83,6 +83,17 @@ const Discovery = () => {
       qc.invalidateQueries({ queryKey: ["agent_events"] });
     },
     onError: (e: Error) => toast({ title: "Search failed", description: e.message, variant: "destructive" }),
+  });
+
+  const sortNow = useMutation({
+    mutationFn: () => action<{ sorted: number; qualified: number; dismissed: number }>("sort-discoveries"),
+    onSuccess: (r) => {
+      toast({ title: `Sorted ${r.sorted}`, description: `${r.qualified} qualified, ${r.dismissed} dismissed` });
+      qc.invalidateQueries({ queryKey: ["discovered"] });
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["agent_events"] });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't sort them", description: e.message, variant: "destructive" }),
   });
 
   const setStatus = useMutation({
@@ -164,6 +175,7 @@ const Discovery = () => {
               {last.with_website ? ` ${last.with_website} already have a website.` : ""}
               {last.already_known ? ` ${last.already_known} were already in Scotty.` : ""}
               {last.closed ? ` ${last.closed} are closed.` : ""}
+              {last.qualified != null ? ` Scotty qualified ${last.qualified} and dismissed ${last.dismissed}.` : ""}
             </p>
           ) : null}
         </form>
@@ -179,6 +191,12 @@ const Discovery = () => {
                 {v.label}
               </button>
             ))}
+            {view === "discovered" && leads.data?.length ? (
+              <Button size="sm" variant="outline" className="ml-2 h-7" disabled={sortNow.isPending} onClick={() => sortNow.mutate()}>
+                {sortNow.isPending ? <Loader2 className="animate-spin" /> : null}
+                {sortNow.isPending ? "Sorting…" : "Let Scotty sort these"}
+              </Button>
+            ) : null}
             <span className="ml-auto text-[11px] text-muted-foreground">New finds nobody acts on are cleared after 30 days, as Google's terms require.</span>
           </div>
 
@@ -209,6 +227,7 @@ const Discovery = () => {
                           <div className="max-w-[340px] truncate text-[12px] text-muted-foreground" title={l.location ?? ""}>
                             {[l.category, l.location].filter(Boolean).join(" · ")}
                           </div>
+                          {a.agent_reason ? <div className="mt-0.5 text-[12px] italic text-muted-foreground">Scotty: {a.agent_reason}</div> : null}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2">
                           {l.phone ? (

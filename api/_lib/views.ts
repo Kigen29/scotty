@@ -89,6 +89,15 @@ export async function overview(operatorId: string) {
     "SELECT status, count(*)::int AS n FROM scotty.leads WHERE user_id = $1::uuid GROUP BY status",
     [operatorId],
   );
-  const [settings] = await q<{ auto_reply_enabled: boolean }>("SELECT auto_reply_enabled FROM scotty.settings WHERE user_id = $1::uuid", [operatorId]);
-  return { ...counts, median_reply_minutes: speed?.median_minutes ?? null, pipeline, auto_reply_enabled: settings?.auto_reply_enabled ?? true };
+  const [settings] = await q<{ auto_reply_enabled: boolean; auto_qualify_enabled: boolean }>(
+    "SELECT auto_reply_enabled, auto_qualify_enabled FROM scotty.settings WHERE user_id = $1::uuid",
+    [operatorId],
+  );
+  return {
+    ...counts,
+    median_reply_minutes: speed?.median_minutes ?? null,
+    pipeline,
+    auto_reply_enabled: settings?.auto_reply_enabled ?? true,
+    auto_qualify_enabled: settings?.auto_qualify_enabled ?? true,
+  };
 }

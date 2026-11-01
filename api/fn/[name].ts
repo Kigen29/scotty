@@ -1,6 +1,7 @@
 import { sendReply, sortConversation } from "../_lib/inbox.js";
 import { overview, threads } from "../_lib/views.js";
 import { discover, placesRequestsThisMonth } from "../_lib/discovery.js";
+import { sortDiscoveries } from "../_lib/qualify.js";
 import { currentOperator, json } from "../_lib/session.js";
 
 /**
@@ -16,6 +17,8 @@ const handlers: Record<string, (body: Body, operatorId: string) => Promise<unkno
   "sort-conversation": (b, op) => sortConversation(String(b.conversation_id ?? ""), op),
   // Google Places discovery, and how much of this month's free allowance is left.
   "discover-leads": (b, op) => discover({ category: b.category as string, location: b.location as string, query: b.query as string, pages: b.pages as number }, op),
+  // Lets Scotty qualify or dismiss discovered businesses nobody has sorted yet.
+  "sort-discoveries": (_b, op) => sortDiscoveries(op),
   "discovery-usage": async (_b, op) => ({ used: await placesRequestsThisMonth(op), limit: Number(process.env.PLACES_MONTHLY_LIMIT ?? 900), configured: Boolean(process.env.GOOGLE_PLACES_API_KEY) }),
   // Read models for the Inbox and Home screens.
   threads: (_b, op) => threads(op),
