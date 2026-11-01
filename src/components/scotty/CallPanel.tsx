@@ -11,21 +11,20 @@ import { ago } from "@/components/scotty/ui";
 import { cn } from "@/lib/utils";
 
 type Lead = Tables<"leads">;
-type Sheet = {
-  opener: string;
-  talking_points: string[];
-  objections: { q: string; a: string }[];
-  ask: string;
-  message: string;
-  report: { headline: string };
+type Prepared = {
+  first_message: string;
+  call: { opener: string; talking_points: string[]; objections: { q: string; a: string }[]; ask: string };
+  audit: { title: string };
+  send_message: string;
+  hook?: string | null;
 };
 
 const REPORT_BASE = "https://code5developers.com/r";
 const OUTCOMES = [
-  { id: "no_answer", label: "No answer" },
-  { id: "call_back", label: "Call back" },
+  { id: "no_answer", label: "No reply / no answer" },
+  { id: "call_back", label: "Follow up later" },
   { id: "not_interested", label: "Not interested" },
-  { id: "interested", label: "Interested" },
+  { id: "interested", label: "Said yes" },
 ] as const;
 
 /** Kenyan numbers → wa.me digits. Mirrors whatsappDigits() on the server. */
@@ -36,21 +35,41 @@ function waDigits(phone: string | null) {
   return d.length >= 10 ? d : null;
 }
 
-/** Everything for one call: the prepared notes, the report link, the outcome, and sending the report after a yes. */
+function CopyBox({ label, text }: { label: string; text: string }) {
+  const { toast } = useToast();
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-muted-foreground">{label}</span>
+        <button className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground" onClick={() => navigator.clipboard.writeText(text).then(() => toast({ title: "Copied" }))}>
+          <Copy className="h-3 w-3" /> Copy
+        </button>
+      </div>
+      <p className="whitespace-pre-wrap rounded bg-muted/40 p-2 text-[12px] leading-relaxed">{text}</p>
+    </div>
+  );
+}
+
+/**
+ * Outreach for one lead, in the shape of the Polar message that worked: a personal first message offering a free
+ * audit as a gift, call notes if you'd rather ring, then the audit itself once they say yes.
+ */
 export function CallPanel({ lead }: { lead: Lead }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const prepared = (lead.report as Prepared | null)?.audit ? (lead.report as Prepared) : null;
+  const [hook, setHook] = useState(prepared?.hook ?? "");
   const [outcome, setOutcome] = useState<(typeof OUTCOMES)[number]["id"] | null>(null);
   const [note, setNote] = useState("");
-  const [callBack, setCallBack] = useState("");
+  const [followUp, setFollowUp] = useState("");
   const [consent, setConsent] = useState(false);
   const [email, setEmail] = useState(lead.email ?? "");
 
-  const sheet = (lead.report as Sheet | null) ?? null;
   const url = lead.report_token ? `${REPORT_BASE}/${lead.report_token}` : null;
   const wa = waDigits(lead.phone);
+  const social = ((lead.analysis ?? {}) as { listed_url?: string | null }).listed_url ?? null;
   const consented = !!lead.consent_at;
-  const text = sheet && url ? `${sheet.message}\n\n${url}` : "";
+  const sendText = prepared && url ? `${prepared.send_message}\n\n${url}` : "";
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["lead", lead.id] });
@@ -59,9 +78,9 @@ export function CallPanel({ lead }: { lead: Lead }) {
     qc.invalidateQueries({ queryKey: ["leads"] });
   };
   const prepare = useMutation({
-    mutationFn: (again: boolean) => action("prepare-call", { lead_id: lead.id, refresh: again }),
+    mutationFn: () => action("prepare-call", { lead_id: lead.id, refresh: !!prepared, hook: hook.trim() || undefined }),
     onSuccess: refresh,
-    onError: (e: Error) => toast({ title: "Couldn't prepare the call", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Couldn't prepare it", description: e.message, variant: "destructive" }),
   });
   const log = useMutation({
     mutationFn: () =>
@@ -69,106 +88,114 @@ export function CallPanel({ lead }: { lead: Lead }) {
         lead_id: lead.id,
         outcome,
         note: note || undefined,
-        call_back_at: outcome === "call_back" && callBack ? new Date(callBack).toISOString() : undefined,
+        call_back_at: outcome === "call_back" && followUp ? new Date(followUp).toISOString() : undefined,
         consent: outcome === "interested" && consent,
         email: outcome === "interested" && consent && email.trim() ? email.trim() : undefined,
       }),
     onSuccess: () => {
-      toast({ title: "Call logged" });
+      toast({ title: "Logged" });
       setOutcome(null);
       setNote("");
-      setCallBack("");
+      setFollowUp("");
       refresh();
     },
-    onError: (e: Error) => toast({ title: "Couldn't log the call", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Couldn't log it", description: e.message, variant: "destructive" }),
   });
-  const emailReport = useMutation({
+  const emailAudit = useMutation({
     mutationFn: () => action("send-report-email", { lead_id: lead.id }),
     onSuccess: () => {
-      toast({ title: "Report emailed", description: lead.email ?? undefined });
+      toast({ title: "Audit emailed", description: lead.email ?? undefined });
       refresh();
     },
     onError: (e: Error) => toast({ title: "Not sent", description: e.message, variant: "destructive" }),
   });
 
-  if (!lead.phone && !lead.email) return null;
-
   return (
     <section className="space-y-3 rounded-lg border p-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-[13px] font-semibold">Call</h2>
+        <h2 className="text-[13px] font-semibold">Outreach</h2>
         {lead.last_call_at ? (
           <span className="text-[11px] text-muted-foreground">
-            Last call {ago(lead.last_call_at)}: {OUTCOMES.find((o) => o.id === lead.last_call_outcome)?.label ?? lead.last_call_outcome}
+            {ago(lead.last_call_at)}: {OUTCOMES.find((o) => o.id === lead.last_call_outcome)?.label ?? lead.last_call_outcome}
           </span>
         ) : null}
       </div>
 
-      {lead.phone ? (
-        <a href={`tel:${lead.phone.replace(/\s/g, "")}`} className="flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-[15px] font-medium hover:bg-muted">
-          <Phone className="h-4 w-4" /> {lead.phone}
-        </a>
-      ) : null}
-
-      {!sheet ? (
-        <Button size="sm" variant="outline" className="w-full" disabled={prepare.isPending} onClick={() => prepare.mutate(false)}>
-          {prepare.isPending ? <Loader2 className="animate-spin" /> : null}
-          {prepare.isPending ? "Preparing notes and report…" : "Prepare call notes and free report"}
+      <div className="space-y-1.5">
+        <label htmlFor="hook" className="text-[11px] text-muted-foreground">
+          What caught your eye? (optional, makes the opening personal)
+        </label>
+        <Input id="hook" value={hook} onChange={(e) => setHook(e.target.value)} placeholder="e.g. anniversary video on TikTok, pop-ups to a café" className="h-8 text-[12px]" />
+        <Button size="sm" variant={prepared ? "outline" : "default"} className="w-full" disabled={prepare.isPending} onClick={() => prepare.mutate()}>
+          {prepare.isPending ? <Loader2 className="animate-spin" /> : prepared ? <RefreshCw /> : null}
+          {prepare.isPending ? "Writing the message and audit…" : prepared ? "Rewrite" : "Write first message and free audit"}
         </Button>
-      ) : (
-        <div className="space-y-2 text-[12px]">
-          <p className="rounded bg-muted/40 p-2 italic">“{sheet.opener}”</p>
-          <ul className="list-disc space-y-1 pl-4">
-            {sheet.talking_points.map((t) => (
-              <li key={t}>{t}</li>
-            ))}
-          </ul>
-          <details>
-            <summary className="cursor-pointer text-muted-foreground">If they say…</summary>
-            <dl className="mt-1 space-y-1.5">
-              {sheet.objections.map((o) => (
-                <div key={o.q}>
-                  <dt className="font-medium">“{o.q}”</dt>
-                  <dd className="text-muted-foreground">{o.a}</dd>
-                </div>
-              ))}
-            </dl>
-          </details>
-          <p className="font-medium">{sheet.ask}</p>
-          {url ? (
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <a href={url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 truncate hover:text-foreground">
-                <ExternalLink className="h-3 w-3 shrink-0" /> Their free report
+      </div>
+
+      {prepared ? (
+        <div className="space-y-3">
+          <CopyBox label="First message" text={prepared.first_message} />
+          <div className="flex flex-wrap gap-1">
+            {social ? (
+              <a href={social} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] hover:bg-muted/50">
+                <ExternalLink className="h-3 w-3" /> Open their page to send it
               </a>
-              <button className="ml-auto inline-flex items-center gap-1 hover:text-foreground" onClick={() => prepare.mutate(true)} disabled={prepare.isPending} title="Write it again">
-                <RefreshCw className={cn("h-3 w-3", prepare.isPending && "animate-spin")} /> Rewrite
-              </button>
-            </div>
+            ) : null}
+            {url ? (
+              <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] hover:bg-muted/50">
+                <ExternalLink className="h-3 w-3" /> Preview their audit
+              </a>
+            ) : null}
+          </div>
+          {lead.phone ? (
+            <details className="text-[12px]">
+              <summary className="cursor-pointer text-muted-foreground">Rather call? Notes for the call</summary>
+              <div className="mt-2 space-y-2">
+                <a href={`tel:${lead.phone.replace(/\s/g, "")}`} className="flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-[14px] font-medium hover:bg-muted">
+                  <Phone className="h-4 w-4" /> {lead.phone}
+                </a>
+                <p className="rounded bg-muted/40 p-2 italic">“{prepared.call.opener}”</p>
+                <ul className="list-disc space-y-1 pl-4">
+                  {prepared.call.talking_points.map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ul>
+                <dl className="space-y-1.5">
+                  {prepared.call.objections.map((o) => (
+                    <div key={o.q}>
+                      <dt className="font-medium">“{o.q}”</dt>
+                      <dd className="text-muted-foreground">{o.a}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="font-medium">{prepared.call.ask}</p>
+              </div>
+            </details>
           ) : null}
         </div>
-      )}
+      ) : null}
 
       <div className="space-y-2 border-t pt-3">
-        <p className="text-[12px] text-muted-foreground">How did it go?</p>
+        <p className="text-[12px] text-muted-foreground">What happened?</p>
         <div className="grid grid-cols-2 gap-1">
           {OUTCOMES.map((o) => (
             <button
               key={o.id}
               onClick={() => setOutcome(o.id)}
-              className={cn("h-8 rounded-md border text-[12px]", outcome === o.id ? "border-foreground/40 bg-muted font-medium" : "hover:bg-muted/50")}
+              className={cn("h-8 rounded-md border px-1 text-[12px]", outcome === o.id ? "border-foreground/40 bg-muted font-medium" : "hover:bg-muted/50")}
             >
               {o.label}
             </button>
           ))}
         </div>
         {outcome === "call_back" ? (
-          <Input type="datetime-local" value={callBack} onChange={(e) => setCallBack(e.target.value)} className="h-8 text-[12px]" aria-label="Call back at" />
+          <Input type="datetime-local" value={followUp} onChange={(e) => setFollowUp(e.target.value)} className="h-8 text-[12px]" aria-label="Follow up at" />
         ) : null}
         {outcome === "interested" ? (
           <div className="space-y-2 rounded-md bg-muted/40 p-2">
             <label className="flex items-start gap-2 text-[12px]">
               <Checkbox checked={consent} onCheckedChange={(c) => setConsent(c === true)} className="mt-0.5" />
-              <span>They agreed to receive the free report. This is recorded as their consent to hear from you.</span>
+              <span>They said yes to receiving the audit. This is recorded as their consent to hear from you.</span>
             </label>
             {consent ? <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Their email (optional)" className="h-8 text-[12px]" /> : null}
           </div>
@@ -177,38 +204,36 @@ export function CallPanel({ lead }: { lead: Lead }) {
           <>
             <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="h-8 text-[12px]" />
             <Button size="sm" className="w-full" disabled={log.isPending} onClick={() => log.mutate()}>
-              Log call
+              Save
             </Button>
           </>
         ) : null}
       </div>
 
-      {consented && sheet && url ? (
+      {consented && prepared && url ? (
         <div className="space-y-2 border-t pt-3">
-          <p className="text-[12px] text-muted-foreground">They agreed {ago(lead.consent_at!)}. Send the report:</p>
+          <p className="text-[12px] text-muted-foreground">They said yes {ago(lead.consent_at!)}. Send the audit:</p>
+          <CopyBox label="Message with the link" text={sendText} />
           <div className="grid grid-cols-3 gap-1">
             {wa ? (
-              <a href={`https://wa.me/${wa}?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center justify-center gap-1 rounded-md border text-[12px] hover:bg-muted/50">
+              <a href={`https://wa.me/${wa}?text=${encodeURIComponent(sendText)}`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center justify-center gap-1 rounded-md border text-[12px] hover:bg-muted/50">
                 <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
               </a>
             ) : null}
             {lead.phone ? (
-              <a href={`sms:${lead.phone.replace(/\s/g, "")}?body=${encodeURIComponent(text)}`} className="inline-flex h-8 items-center justify-center gap-1 rounded-md border text-[12px] hover:bg-muted/50">
+              <a href={`sms:${lead.phone.replace(/\s/g, "")}?body=${encodeURIComponent(sendText)}`} className="inline-flex h-8 items-center justify-center gap-1 rounded-md border text-[12px] hover:bg-muted/50">
                 <Send className="h-3.5 w-3.5" /> SMS
               </a>
             ) : null}
             <button
-              disabled={!lead.email || emailReport.isPending}
-              onClick={() => emailReport.mutate()}
+              disabled={!lead.email || emailAudit.isPending}
+              onClick={() => emailAudit.mutate()}
               className="inline-flex h-8 items-center justify-center gap-1 rounded-md border text-[12px] hover:bg-muted/50 disabled:opacity-40"
               title={lead.email ? `Email ${lead.email}` : "No email address"}
             >
               Email
             </button>
           </div>
-          <button className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground" onClick={() => navigator.clipboard.writeText(text).then(() => toast({ title: "Copied" }))}>
-            <Copy className="h-3 w-3" /> Copy message and link
-          </button>
           {lead.report_viewed_at ? <p className="text-[11px] text-primary">Opened {ago(lead.report_viewed_at)}</p> : null}
         </div>
       ) : null}

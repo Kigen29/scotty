@@ -24,7 +24,7 @@ const handlers: Record<string, (body: Body, operatorId: string) => Promise<unkno
   "discovery-usage": async (_b, op) => ({ used: await placesRequestsThisMonth(op), limit: Number(process.env.PLACES_MONTHLY_LIMIT ?? 900), configured: Boolean(process.env.GOOGLE_PLACES_API_KEY) }),
   // Call-assisted outreach: the call list, a prepared call sheet and report, call outcomes, and the consented report email.
   calls: (_b, op) => callList(op),
-  "prepare-call": (b, op) => prepareCall(String(b.lead_id ?? ""), op, b.refresh === true),
+  "prepare-call": (b, op) => prepareCall(String(b.lead_id ?? ""), op, b.refresh === true, b.hook ? String(b.hook) : undefined),
   "log-call": (b, op) =>
     logCall(
       {

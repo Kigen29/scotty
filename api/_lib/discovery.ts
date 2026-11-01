@@ -43,7 +43,7 @@ const monthlyLimit = () => Number(process.env.PLACES_MONTHLY_LIMIT ?? 900);
 export async function placesRequestsThisMonth(operatorId: string) {
   const [r] = await q<{ n: number }>(
     `SELECT coalesce(sum((details->>'requests')::int), 0)::int AS n FROM scotty.agent_events
-      WHERE user_id = $1::uuid AND kind = 'discovered' AND created_at >= date_trunc('month', now())`,
+      WHERE user_id = $1::uuid AND kind IN ('discovered', 'prepared') AND created_at >= date_trunc('month', now())`,
     [operatorId],
   );
   return r.n;
