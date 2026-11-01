@@ -1,5 +1,4 @@
 import nodemailer, { type Transporter } from "nodemailer";
-import { textToHtml } from "./mail.js";
 
 /**
  * The outreach mailbox (outreach@code5developers.com on Truehost), for the first email to a business that hasn't
@@ -17,8 +16,11 @@ export const outreachDailyLimit = () => Math.max(0, Number(process.env.OUTREACH_
 
 let transport: Transporter | undefined;
 
-/** Sends one email from the outreach mailbox; returns the Message-ID. */
-export async function sendOutreachMail(m: { to: string; subject: string; text: string; replyTo: string; unsubscribe: string }) {
+/**
+ * Sends one email from the outreach mailbox; returns the Message-ID. Plain text only, with no bulk-mail headers:
+ * it should read and file like a personal note, not a newsletter.
+ */
+export async function sendOutreachMail(m: { to: string; subject: string; text: string; replyTo: string }) {
   if (!outreachConfigured()) throw new Error("The outreach mailbox isn't set up: add SMTP_HOST, SMTP_USER and SMTP_PASSWORD in Vercel.");
   const port = Number(process.env.SMTP_PORT ?? 465);
   transport ??= nodemailer.createTransport({
@@ -33,8 +35,6 @@ export async function sendOutreachMail(m: { to: string; subject: string; text: s
     replyTo: m.replyTo,
     subject: m.subject,
     text: m.text,
-    html: textToHtml(m.text),
-    headers: { "List-Unsubscribe": `<${m.unsubscribe}>` },
   });
   return info.messageId;
 }

@@ -2,6 +2,7 @@ import { autoReplyDecision, type Decision } from "./autoreply.js";
 import { replyAddress, reportUrl } from "./email.js";
 import { sql } from "./db.js";
 import { escapeHtml, mailConfigured, sendMail, studioInboxes, textToHtml, DEFAULT_INBOX } from "./mail.js";
+import { outreachConfigured, sendOutreachMail } from "./smtp.js";
 import { triageConfigured, triageMessage, type StudioSettings, type Triage } from "./triage.js";
 
 /**
@@ -360,17 +361,22 @@ export async function sendReply(input: { lead_id: string; message: string; subje
       WHERE lead_id = $1::uuid AND user_id = $2::uuid AND direction = 'inbound' ORDER BY created_at DESC LIMIT 1`,
     [input.lead_id, operatorId],
   );
-  const subject = input.subject?.trim() || last?.ai_suggested_subject || (last?.subject ? `Re: ${last.subject}` : "Re: your enquiry");
+  // If we wrote first from the outreach mailbox, keep answering from it, in the same thread.
+  const [first] = await q<{ direction: string; channel: string; subject: string | null }>(
+    "SELECT direction, channel, subject FROM scotty.conversations WHERE lead_id = $1::uuid AND user_id = $2::uuid ORDER BY created_at LIMIT 1",
+    [input.lead_id, operatorId],
+  );
+  const viaOutreach = first?.direction === "outbound" && first.channel === "email" && outreachConfigured();
+  const subject = viaOutreach
+    ? `Re: ${(first.subject ?? "").replace(/^(re:\s*)+/i, "")}`
+    : input.subject?.trim() || last?.ai_suggested_subject || (last?.subject ? `Re: ${last.subject}` : "Re: your enquiry");
+  // With inbound set up, replies come back to Scotty tagged with the lead; otherwise to the studio inbox.
+  const replyTo = process.env.INBOUND_DOMAIN ? replyAddress(input.lead_id, process.env.INBOUND_DOMAIN) : process.env.REPLY_TO || DEFAULT_INBOX;
 
   // Send first, record after: a failed send must never show up as a sent message.
-  const id = await sendMail({
-    from: process.env.REPLY_FROM || process.env.MAIL_FROM,
-    to: [check.email],
-    // With inbound set up, replies come back to Scotty tagged with the lead; otherwise to the studio inbox.
-    replyTo: process.env.INBOUND_DOMAIN ? replyAddress(input.lead_id, process.env.INBOUND_DOMAIN) : process.env.REPLY_TO || DEFAULT_INBOX,
-    subject,
-    text: message,
-  });
+  const id = viaOutreach
+    ? await sendOutreachMail({ to: check.email, subject, text: message, replyTo })
+    : await sendMail({ from: process.env.REPLY_FROM || process.env.MAIL_FROM, to: [check.email], replyTo, subject, text: message });
   const [conv] = await q<{ id: string; created_at: string }>(
     `INSERT INTO scotty.conversations (user_id, lead_id, direction, channel, subject, message, external_id, sent_by)
      VALUES ($1::uuid, $2::uuid, 'outbound', 'email', $3, $4, $5, $6) RETURNING id, created_at`,
