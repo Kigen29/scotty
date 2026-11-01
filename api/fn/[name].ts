@@ -2,6 +2,8 @@ import { sendReply, sortConversation } from "../_lib/inbox.js";
 import { overview, threads } from "../_lib/views.js";
 import { discover, placesRequestsThisMonth } from "../_lib/discovery.js";
 import { sortDiscoveries } from "../_lib/qualify.js";
+import { logCall, prepareCall, sendReportEmail, type CallOutcome } from "../_lib/outreach.js";
+import { callList } from "../_lib/calls.js";
 import { currentOperator, json } from "../_lib/session.js";
 
 /**
@@ -20,6 +22,22 @@ const handlers: Record<string, (body: Body, operatorId: string) => Promise<unkno
   // Lets Scotty qualify or dismiss discovered businesses nobody has sorted yet.
   "sort-discoveries": (_b, op) => sortDiscoveries(op),
   "discovery-usage": async (_b, op) => ({ used: await placesRequestsThisMonth(op), limit: Number(process.env.PLACES_MONTHLY_LIMIT ?? 900), configured: Boolean(process.env.GOOGLE_PLACES_API_KEY) }),
+  // Call-assisted outreach: the call list, a prepared call sheet and report, call outcomes, and the consented report email.
+  calls: (_b, op) => callList(op),
+  "prepare-call": (b, op) => prepareCall(String(b.lead_id ?? ""), op, b.refresh === true),
+  "log-call": (b, op) =>
+    logCall(
+      {
+        lead_id: String(b.lead_id ?? ""),
+        outcome: b.outcome as CallOutcome,
+        note: b.note ? String(b.note) : undefined,
+        call_back_at: b.call_back_at ? String(b.call_back_at) : undefined,
+        consent: b.consent === true,
+        email: b.email ? String(b.email) : undefined,
+      },
+      op,
+    ),
+  "send-report-email": (b, op) => sendReportEmail(String(b.lead_id ?? ""), op),
   // Read models for the Inbox and Home screens.
   threads: (_b, op) => threads(op),
   overview: (_b, op) => overview(op),

@@ -328,6 +328,14 @@ export type Database = {
       }
       leads: {
         Row: {
+          report_token: string | null
+          report: Json | null
+          report_viewed_at: string | null
+          consent_at: string | null
+          consent_note: string | null
+          last_call_at: string | null
+          last_call_outcome: string | null
+          next_call_at: string | null
           place_id: string | null
           google_maps_url: string | null
           rating: number | null
@@ -360,6 +368,14 @@ export type Database = {
           website_url: string | null
         }
         Insert: {
+          report_token?: string | null
+          report?: Json | null
+          report_viewed_at?: string | null
+          consent_at?: string | null
+          consent_note?: string | null
+          last_call_at?: string | null
+          last_call_outcome?: string | null
+          next_call_at?: string | null
           place_id?: string | null
           google_maps_url?: string | null
           rating?: number | null
@@ -392,6 +408,14 @@ export type Database = {
           website_url?: string | null
         }
         Update: {
+          report_token?: string | null
+          report?: Json | null
+          report_viewed_at?: string | null
+          consent_at?: string | null
+          consent_note?: string | null
+          last_call_at?: string | null
+          last_call_outcome?: string | null
+          next_call_at?: string | null
           place_id?: string | null
           google_maps_url?: string | null
           rating?: number | null

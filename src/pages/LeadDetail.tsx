@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Empty, ago, fullDate } from "@/components/scotty/ui";
 import { STAGES } from "@/lib/api";
+import { CallPanel } from "@/components/scotty/CallPanel";
 import { cn } from "@/lib/utils";
 
 type Lead = Tables<"leads">;
@@ -149,6 +150,7 @@ const LeadDetail = () => {
         </section>
 
         <aside className="space-y-6">
+          {l.discovery_source === "google_places" || l.last_call_at || l.consent_at ? <CallPanel lead={l} /> : null}
           <section>
             <h2 className="mb-1 text-[13px] font-medium text-muted-foreground">Details</h2>
             <dl className="divide-y rounded-lg border px-3">

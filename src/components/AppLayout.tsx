@@ -2,19 +2,20 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import {
-  Activity, BarChart3, Columns3, GitBranch, Home, Inbox, LogOut, Mail, Menu, Moon, Search, Settings, ShieldCheck, Sun, Users,
+  Activity, BarChart3, Columns3, GitBranch, Home, Inbox, LogOut, Mail, Menu, Moon, Phone, Search, Settings, ShieldCheck, Sun, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { useOverview, useThreads } from "@/lib/api";
+import { useCalls, useOverview, useThreads } from "@/lib/api";
 
 type Item = { to: string; label: string; icon: typeof Home; end?: boolean };
 
 const WORK: Item[] = [
   { to: "/", label: "Home", icon: Home, end: true },
   { to: "/inbox", label: "Inbox", icon: Inbox },
+  { to: "/calls", label: "Calls", icon: Phone },
   { to: "/leads", label: "Leads", icon: Users },
   { to: "/pipeline", label: "Pipeline", icon: Columns3 },
   { to: "/discovery", label: "Discovery", icon: Search },
@@ -71,10 +72,13 @@ const AppLayout = () => {
   const { user } = useAuth();
   const threads = useThreads();
   const overview = useOverview();
+  const calls = useCalls();
 
   useEffect(() => setOpen(false), [location.pathname]);
 
   const needsYou = threads.data?.filter((t) => t.state === "needs_you").length ?? 0;
+  // Calls that are due now: call-backs and people looking at their report.
+  const callsDue = (calls.data?.call_backs.length ?? 0) + (calls.data?.opened.length ?? 0);
   const autoOn = overview.data?.auto_reply_enabled;
   const close = isMobile ? () => setOpen(false) : undefined;
 
@@ -102,7 +106,7 @@ const AppLayout = () => {
         <nav className="flex-1 overflow-y-auto px-2 pb-4">
           <div className="space-y-px">
             {WORK.map((item) => (
-              <NavItem key={item.to} item={item} onClick={close} badge={item.to === "/inbox" ? needsYou : undefined} />
+              <NavItem key={item.to} item={item} onClick={close} badge={item.to === "/inbox" ? needsYou : item.to === "/calls" ? callsDue : undefined} />
             ))}
           </div>
           <Group label="Scotty">

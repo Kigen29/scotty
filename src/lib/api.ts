@@ -74,3 +74,21 @@ export const STAGES = [
 ] as const;
 
 export const stageLabel = (id: string) => STAGES.find((s) => s.id === id)?.label ?? id;
+
+export type CallLead = {
+  id: string;
+  business_name: string;
+  category: string | null;
+  location: string | null;
+  phone: string | null;
+  icp_score: number | null;
+  last_call_at: string | null;
+  last_call_outcome: string | null;
+  next_call_at: string | null;
+  report_viewed_at: string | null;
+  agent_reason: string | null;
+};
+export type CallList = { call_backs: CallLead[]; opened: CallLead[]; to_call: CallLead[] };
+
+/** The Calls screen's list; also feeds the sidebar badge. */
+export const useCalls = () => useQuery({ queryKey: ["calls"], queryFn: () => action<CallList>("calls"), refetchInterval: 60_000 });
