@@ -27,7 +27,7 @@ Defined in [`App.tsx`](App.tsx). Everything except `/auth` sits inside
 | --- | --- | --- |
 | `/auth` | `Auth` | Sign in / sign up |
 | `/` | `Dashboard` | Stats, agent health, hot leads, quota, manual outreach trigger |
-| `/discovery` | `LeadDiscovery` | Lead table, manual discovery, bulk verify/enrich |
+| `/discovery` | `Discovery` | Google Places search for businesses without a website |
 | `/campaigns` | `Campaigns` | Drafted and sent messages |
 | `/sequences` | `Sequences` | Multi-step cadence authoring and enrollments |
 | `/pipeline` | `Pipeline` | Drag-and-drop Kanban by lead status |

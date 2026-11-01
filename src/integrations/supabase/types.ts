@@ -328,6 +328,11 @@ export type Database = {
       }
       leads: {
         Row: {
+          place_id: string | null
+          google_maps_url: string | null
+          rating: number | null
+          review_count: number | null
+          places_fetched_at: string | null
           analysis: Json | null
           assigned_to: string | null
           business_name: string
@@ -355,6 +360,11 @@ export type Database = {
           website_url: string | null
         }
         Insert: {
+          place_id?: string | null
+          google_maps_url?: string | null
+          rating?: number | null
+          review_count?: number | null
+          places_fetched_at?: string | null
           analysis?: Json | null
           assigned_to?: string | null
           business_name: string
@@ -382,6 +392,11 @@ export type Database = {
           website_url?: string | null
         }
         Update: {
+          place_id?: string | null
+          google_maps_url?: string | null
+          rating?: number | null
+          review_count?: number | null
+          places_fetched_at?: string | null
           analysis?: Json | null
           assigned_to?: string | null
           business_name?: string

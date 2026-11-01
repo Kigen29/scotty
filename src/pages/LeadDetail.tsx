@@ -157,7 +157,20 @@ const LeadDetail = () => {
               <Detail label="Location">{l.location}</Detail>
               <Detail label="Category">{l.category}</Detail>
               <Detail label="Website">{l.website_url ? <a href={l.website_url} target="_blank" rel="noreferrer" className="hover:underline">{l.website_url.replace(/^https?:\/\//, "")}</a> : l.has_website === false ? "None" : null}</Detail>
-              <Detail label="Source">{l.discovery_source}</Detail>
+              {l.place_id ? (
+                <Detail label="On Google">
+                  {l.rating ? `${Number(l.rating).toFixed(1)} stars from ${l.review_count ?? 0} reviews` : "No reviews"}
+                  {l.google_maps_url ? (
+                    <>
+                      {" · "}
+                      <a href={l.google_maps_url} target="_blank" rel="noreferrer" className="hover:underline">
+                        Map
+                      </a>
+                    </>
+                  ) : null}
+                </Detail>
+              ) : null}
+              <Detail label="Source">{l.discovery_source === "google_places" ? "Google Maps" : l.discovery_source}</Detail>
               <Detail label="Added">{fullDate(l.created_at)}</Detail>
             </dl>
           </section>
