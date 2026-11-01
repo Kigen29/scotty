@@ -1,5 +1,11 @@
 # scotty
 
+## 3.8.1
+
+### Patch Changes
+
+- fd48e32: Outreach emails are plain text with no bulk-mail headers, so they read like a personal note, and replies to a business we emailed first go from the outreach mailbox in the same thread instead of from info@.
+
 ## 3.8.0
 
 ### Minor Changes
