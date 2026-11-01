@@ -67,7 +67,9 @@ export function CallPanel({ lead }: { lead: Lead }) {
 
   const url = lead.report_token ? `${REPORT_BASE}/${lead.report_token}` : null;
   const wa = waDigits(lead.phone);
-  const social = ((lead.analysis ?? {}) as { listed_url?: string | null }).listed_url ?? null;
+  const analysis = (lead.analysis ?? {}) as { listed_url?: string | null; instagram?: { url: string; source: "google" | "guessed"; username: string } | null };
+  const social = analysis.listed_url ?? analysis.instagram?.url ?? null;
+  const guessedIg = !analysis.listed_url && analysis.instagram?.source === "guessed";
   const consented = !!lead.consent_at;
   const sendText = prepared && url ? `${prepared.send_message}\n\n${url}` : "";
 
@@ -152,7 +154,7 @@ export function CallPanel({ lead }: { lead: Lead }) {
           <div className="flex flex-wrap gap-1">
             {social ? (
               <a href={social} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] hover:bg-muted/50">
-                <ExternalLink className="h-3 w-3" /> Open their page to send it
+                <ExternalLink className="h-3 w-3" /> {guessedIg ? `Found @${analysis.instagram!.username}: check it's them, then send` : "Open their page to send it"}
               </a>
             ) : null}
             {url ? (
