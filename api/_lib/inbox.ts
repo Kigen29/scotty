@@ -1,4 +1,5 @@
 import { autoReplyDecision, type Decision } from "./autoreply.js";
+import { replyAddress } from "./email.js";
 import { sql } from "./db.js";
 import { escapeHtml, mailConfigured, sendMail, studioInboxes, textToHtml, DEFAULT_INBOX } from "./mail.js";
 import { triageConfigured, triageMessage, type StudioSettings, type Triage } from "./triage.js";
@@ -92,20 +93,102 @@ export async function recordEnquiry(e: Enquiry, operatorId: string) {
     leadId: lead.id,
     conversationId: conv.id,
   });
+  return afterInbound({ conversationId: conv.id, leadId: lead.id, who, email, isNew, channel: "website" }, operatorId);
+}
 
+/** Sort, decide, reply or hold, and tell the studio: the same for every inbound message, whatever the channel. */
+async function afterInbound(
+  m: { conversationId: string; leadId: string; who: string; email: string; isNew: boolean; channel: "website" | "email" },
+  operatorId: string,
+) {
   let triage: Triage | null = null;
   try {
-    triage = await sortConversation(conv.id, operatorId, { renameNewLead: isNew });
+    triage = await sortConversation(m.conversationId, operatorId, { renameNewLead: m.isNew });
   } catch (err) {
     console.error("inbox: triage failed", err);
-    await logEvent(operatorId, { kind: "error", summary: `Couldn't sort ${who}'s message: ${(err as Error).message}`, leadId: lead.id, conversationId: conv.id });
+    await logEvent(operatorId, { kind: "error", summary: `Couldn't sort ${m.who}'s message: ${(err as Error).message}`, leadId: m.leadId, conversationId: m.conversationId });
   }
 
-  const decision = await decideAndAct(conv.id, lead.id, triage, operatorId, triage?.business ?? who);
+  const decision = await decideAndAct(m.conversationId, m.leadId, triage, operatorId, triage?.business ?? m.who);
   if (decision.action !== "skipped") {
-    await alert({ name: who, email, business: triage?.business ?? null }, triage, decision).catch((err) => console.error("inbox: alert failed", err));
+    await alert({ name: m.who, email: m.email, business: triage?.business ?? null, channel: m.channel }, triage, decision).catch((err) =>
+      console.error("inbox: alert failed", err),
+    );
   }
-  return { leadId: lead.id, conversationId: conv.id, triaged: Boolean(triage), action: decision.action };
+  return { leadId: m.leadId, conversationId: m.conversationId, triaged: Boolean(triage), action: decision.action };
+}
+
+export type EmailReply = {
+  /** Resend's id for the received email. */
+  id: string;
+  from: string;
+  fromName: string | null;
+  subject: string;
+  /** Only what they wrote this time, quoted history removed. */
+  text: string;
+  automated: boolean;
+  unsubscribe: boolean;
+  /** The lead named in our reply address, when they replied to one of Scotty's emails. */
+  leadId: string | null;
+};
+
+/**
+ * Records an email someone sent to Scotty's reply address, then runs it through the same pipeline as a
+ * website enquiry. Auto-responders are recorded but never answered; "STOP" marks the person don't-contact.
+ */
+export async function recordEmailReply(r: EmailReply, operatorId: string) {
+  const email = r.from.trim().toLowerCase();
+
+  // The reply address names the lead; fall back to the sender's address; else it's someone new.
+  let lead: { id: string; business_name: string } | undefined;
+  if (r.leadId) {
+    [lead] = await q<{ id: string; business_name: string }>("SELECT id, business_name FROM scotty.leads WHERE id = $1::uuid AND user_id = $2::uuid", [r.leadId, operatorId]);
+  }
+  if (!lead) {
+    [lead] = await q<{ id: string; business_name: string }>(
+      "SELECT id, business_name FROM scotty.leads WHERE user_id = $1::uuid AND lower(email) = $2 ORDER BY created_at LIMIT 1",
+      [operatorId, email],
+    );
+  }
+  const isNew = !lead;
+  if (!lead) {
+    [lead] = await q<{ id: string; business_name: string }>(
+      `INSERT INTO scotty.leads (user_id, business_name, email, status, discovery_source, verification_state, has_website, notes)
+       VALUES ($1::uuid, $2, $3, 'interested', 'email', 'verified', NULL, 'Emailed Scotty directly.')
+       RETURNING id, business_name`,
+      [operatorId, r.fromName || email, email],
+    );
+  }
+
+  const [conv] = await q<{ id: string }>(
+    `INSERT INTO scotty.conversations (user_id, lead_id, direction, channel, subject, message, external_id)
+     VALUES ($1::uuid, $2::uuid, 'inbound', 'email', $3, $4, $5)
+     ON CONFLICT (external_id) DO NOTHING RETURNING id`,
+    [operatorId, lead.id, r.subject || null, r.text || "(no text)", `email:${r.id}`],
+  );
+  if (!conv) return { leadId: lead.id, duplicate: true as const };
+  const who = r.fromName || lead.business_name || email;
+
+  if (r.automated) {
+    await q("UPDATE scotty.conversations SET agent_action = 'skipped', agent_reason = 'Automatic email (out of office or bounce)' WHERE id = $1::uuid", [conv.id]);
+    await logEvent(operatorId, { kind: "skipped", summary: `Ignored an automatic email from ${who}`, leadId: lead.id, conversationId: conv.id });
+    return { leadId: lead.id, conversationId: conv.id, action: "skipped" as const };
+  }
+
+  if (r.unsubscribe) {
+    await q("UPDATE scotty.leads SET unsubscribed = true, status = 'not_interested' WHERE id = $1::uuid AND user_id = $2::uuid", [lead.id, operatorId]);
+    await q("UPDATE scotty.conversations SET agent_action = 'skipped', agent_reason = 'Asked not to be contacted' WHERE id = $1::uuid", [conv.id]);
+    await logEvent(operatorId, { kind: "skipped", summary: `${who} asked not to be contacted. Marked don't contact.`, leadId: lead.id, conversationId: conv.id });
+    return { leadId: lead.id, conversationId: conv.id, action: "skipped" as const };
+  }
+
+  // A reply means they're engaged; never move a lead backwards.
+  await q(
+    "UPDATE scotty.leads SET status = CASE WHEN status IN ('discovered', 'qualified', 'contacted') THEN 'responded' ELSE status END WHERE id = $1::uuid AND user_id = $2::uuid",
+    [lead.id, operatorId],
+  );
+  await logEvent(operatorId, { kind: "received", summary: `${who} replied by email${isNew ? " (new lead)" : ""}`, leadId: lead.id, conversationId: conv.id });
+  return afterInbound({ conversationId: conv.id, leadId: lead.id, who, email, isNew, channel: "email" }, operatorId);
 }
 
 /** Applies autoReplyDecision() to a freshly sorted inbound message, and sends when it says so. */
@@ -166,11 +249,24 @@ export async function sortConversation(conversationId: string, operatorId: strin
   );
   if (!row) throw new Error("That message wasn't found.");
 
+  // Earlier messages in the thread, oldest first, so a reply is answered in context.
+  const history = (
+    await q<{ direction: string; message: string; created_at: string }>(
+      `SELECT direction, message, created_at FROM scotty.conversations
+        WHERE lead_id = $1::uuid AND user_id = $2::uuid AND id <> $3::uuid
+        ORDER BY created_at DESC LIMIT 8`,
+      [row.lead_id, operatorId, conversationId],
+    )
+  )
+    .reverse()
+    .map((h) => ({ from: (h.direction === "inbound" ? "them" : "us") as "them" | "us", at: h.created_at, text: h.message.slice(0, 2000) }));
+
   const triage = await triageMessage(await loadSettings(operatorId), {
     channel: row.channel,
     from: { name: row.business_name, email: row.email, phone: row.phone },
     subject: row.subject,
     body: row.message,
+    history,
   });
   if (!triage) throw new Error("Claude declined to sort this message.");
 
@@ -186,13 +282,13 @@ export async function sortConversation(conversationId: string, operatorId: strin
   return triage;
 }
 
-async function alert(from: { name: string; email: string; business: string | null }, triage: Triage | null, decision: Decision) {
+async function alert(from: { name: string; email: string; business: string | null; channel: "website" | "email" }, triage: Triage | null, decision: Decision) {
   if (!mailConfigured()) return;
   const who = from.business ? `${from.name} (${from.business})` : from.name || from.email;
   const link = `${appUrl()}/inbox`;
   const replied = decision.action === "auto_replied";
   const lines = [
-    triage?.summary ?? `${who} sent an enquiry through the website.`,
+    triage?.summary ?? (from.channel === "email" ? `${who} replied by email.` : `${who} sent an enquiry through the website.`),
     triage?.suggested_package ? `Best fit: ${triage.suggested_package}` : null,
     "",
     replied
@@ -245,7 +341,8 @@ export async function sendReply(input: { lead_id: string; message: string; subje
   const id = await sendMail({
     from: process.env.REPLY_FROM || process.env.MAIL_FROM,
     to: [check.email],
-    replyTo: process.env.REPLY_TO || DEFAULT_INBOX,
+    // With inbound set up, replies come back to Scotty tagged with the lead; otherwise to the studio inbox.
+    replyTo: process.env.INBOUND_DOMAIN ? replyAddress(input.lead_id, process.env.INBOUND_DOMAIN) : process.env.REPLY_TO || DEFAULT_INBOX,
     subject,
     text: message,
   });
