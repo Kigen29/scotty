@@ -34,7 +34,23 @@ describe("prospect score", () => {
   const targets = { categories: ["bakeries"], locations: ["Ngong"] };
 
   it("rates an active, reachable business with no website highly", () => {
-    expect(prospectScore(base, targets)).toBe(96);
+    // 20 base + 30 no site + 12 phone + 9 for 30 reviews + 8 for 4.5 stars + 4 category + 4 area
+    expect(prospectScore(base, targets)).toBe(87);
+  });
+
+  it("spreads busy businesses apart instead of capping them all at 100", () => {
+    const scores = [
+      prospectScore({ ...base, reviews: 69, rating: 4.9 }, targets),
+      prospectScore({ ...base, reviews: 246, rating: 4.4 }, targets),
+      prospectScore({ ...base, reviews: 7, rating: 5 }, targets),
+      prospectScore({ ...base, reviews: 46, rating: 3.2 }, targets),
+    ];
+    expect(new Set(scores).size).toBe(4);
+    expect(Math.max(...scores)).toBeLessThan(100);
+  });
+
+  it("ignores a perfect rating from a handful of reviews", () => {
+    expect(prospectScore({ ...base, reviews: 2, rating: 5 }, targets)).toBeLessThan(prospectScore({ ...base, reviews: 40, rating: 4.6 }, targets));
   });
   it("ranks no site above social-only above a domain that may host a site", () => {
     const none = prospectScore(base, targets);

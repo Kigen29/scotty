@@ -58,19 +58,22 @@ export type Prospect = {
  * means we can reach them; reviews mean it's an active, trading business; matching the target lists helps.
  */
 export function prospectScore(p: Prospect, targets: { categories: string[]; locations: string[] }) {
-  let score = 30;
+  let score = 20;
   if (p.website === "none") score += 30;
-  else if (p.website === "social") score += 20;
-  if (p.domainRegistered) score -= 10; // they may have a site Google doesn't know about
-  if (p.hasPhone) score += 15;
-  if ((p.reviews ?? 0) >= 50) score += 10;
-  else if ((p.reviews ?? 0) >= 10) score += 6;
-  if ((p.rating ?? 0) >= 4) score += 5;
+  else if (p.website === "social") score += 18;
+  if (p.domainRegistered) score -= 12; // they may have a site Google doesn't know about
+  if (p.hasPhone) score += 12;
+  // Busier businesses can afford a site and lose more without one. Log-scaled so 10, 100 and 1,000
+  // reviews land at 6, 12 and 18 points instead of all maxing out.
+  const reviews = Math.max(0, p.reviews ?? 0);
+  score += Math.min(18, Math.round(6 * Math.log10(1 + reviews)));
+  // A good rating counts once there are enough reviews to mean something: 4.0 → 4, 4.5 → 8, 5.0 → 12.
+  if (reviews >= 5 && p.rating != null) score += Math.max(0, Math.min(12, Math.round((p.rating - 3.5) * 8)));
   // "bakeries" should match "Bakery", "salons" should match "Hair salon"
   const singular = (w: string) => w.trim().toLowerCase().replace(/ies$/, "y").replace(/s$/, "");
   const has = (list: string[], value: string | null) =>
     !!value && list.some((t) => singular(t) && singular(value).includes(singular(t)));
-  if (has(targets.categories, p.category)) score += 5;
-  if (has(targets.locations, p.location)) score += 5;
+  if (has(targets.categories, p.category)) score += 4;
+  if (has(targets.locations, p.location)) score += 4;
   return Math.max(0, Math.min(100, score));
 }

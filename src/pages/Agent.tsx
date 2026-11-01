@@ -16,6 +16,7 @@ const KINDS: { id: string; label: string; dot: string }[] = [
   { id: "operator_replied", label: "You replied", dot: "bg-foreground/50" },
   { id: "skipped", label: "Spam", dot: "bg-muted-foreground/20" },
   { id: "discovered", label: "Discovery", dot: "bg-sky-500" },
+  { id: "sorted", label: "Sorted", dot: "bg-sky-500/60" },
   { id: "error", label: "Problems", dot: "bg-destructive" },
 ];
 const kind = (id: string) => KINDS.find((k) => k.id === id) ?? { id, label: id, dot: "bg-muted-foreground/40" };
@@ -37,15 +38,20 @@ const Agent = () => {
   const [filter, setFilter] = useState<string | null>(null);
 
   const on = overview.data?.auto_reply_enabled ?? true;
+  const sortOn = overview.data?.auto_qualify_enabled ?? true;
   const toggle = useMutation({
-    mutationFn: async (enabled: boolean) => {
-      const { error } = await supabase.from("settings").update({ auto_reply_enabled: enabled }).eq("user_id", user!.id);
+    mutationFn: async (patch: { auto_reply_enabled?: boolean; auto_qualify_enabled?: boolean }) => {
+      const { error } = await supabase.from("settings").update(patch).eq("user_id", user!.id);
       if (error) throw new Error(error.message);
-      return enabled;
+      return patch;
     },
-    onSuccess: (enabled) => {
+    onSuccess: (patch) => {
       qc.invalidateQueries({ queryKey: ["overview"] });
-      toast({ title: enabled ? "Automatic replies are on" : "Automatic replies are off", description: enabled ? undefined : "New enquiries will wait for you in the inbox." });
+      if (patch.auto_reply_enabled !== undefined) {
+        toast({ title: patch.auto_reply_enabled ? "Automatic replies are on" : "Automatic replies are off", description: patch.auto_reply_enabled ? undefined : "New enquiries will wait for you in the inbox." });
+      } else {
+        toast({ title: patch.auto_qualify_enabled ? "Scotty will sort new discoveries" : "New discoveries will wait for you to sort" });
+      }
     },
     onError: (e: Error) => toast({ title: "Couldn't change it", description: e.message, variant: "destructive" }),
   });
@@ -72,7 +78,21 @@ const Agent = () => {
               ))}
             </ul>
           </div>
-          <Switch checked={on} disabled={overview.isLoading || toggle.isPending} onCheckedChange={(c) => toggle.mutate(c)} aria-label="Automatic replies" />
+          <Switch checked={on} disabled={overview.isLoading || toggle.isPending} onCheckedChange={(c) => toggle.mutate({ auto_reply_enabled: c })} aria-label="Automatic replies" />
+        </div>
+
+        <div className="flex items-start justify-between gap-6 rounded-lg border p-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className={cn("h-2 w-2 rounded-full", sortOn ? "bg-primary" : "bg-muted-foreground/40")} />
+              <h2 className="text-[14px] font-semibold">Sort discoveries automatically {sortOn ? "on" : "off"}</h2>
+            </div>
+            <p className="mt-2 max-w-2xl text-[13px] text-muted-foreground">
+              After each Discovery search, Scotty qualifies independent, trading businesses worth a call and dismisses chains, government
+              offices and listings you can't reach, with a reason for each. Dismissed businesses can be restored.
+            </p>
+          </div>
+          <Switch checked={sortOn} disabled={overview.isLoading || toggle.isPending} onCheckedChange={(c) => toggle.mutate({ auto_qualify_enabled: c })} aria-label="Sort discoveries automatically" />
         </div>
 
         <Section title="Last 7 days">
