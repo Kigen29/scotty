@@ -3,8 +3,8 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 
 /**
- * Sorts an incoming message and drafts a reply. Claude only returns data here: it has no tools, and
- * nothing it writes is sent until the operator presses Send in Conversations.
+ * Sorts an incoming message and drafts a reply. Claude only returns data here: it has no tools. Whether the
+ * draft is sent automatically is decided by plain code in autoReplyDecision() (inbox.ts), not by the model.
  *
  * Env: ANTHROPIC_API_KEY
  */
@@ -24,6 +24,11 @@ export const Triage = z.object({
     .object({ subject: z.string(), body: z.string() })
     .nullable()
     .describe("A draft reply, or null for spam"),
+  needs_human: z.boolean().describe("True when the owner should answer this personally instead of an automatic reply"),
+  needs_human_reason: z
+    .string()
+    .nullable()
+    .describe("When needs_human is true: a short reason the owner will read, e.g. 'Asks for a discount'. Otherwise null"),
 });
 export type Triage = z.infer<typeof Triage>;
 
@@ -48,7 +53,7 @@ export function buildSystemPrompt(s: StudioSettings) {
   const studio = "Code 5 Developers";
   const site = s.company_website ? `https://${s.company_website.replace(/^https?:\/\//, "")}` : "https://code5developers.com";
   const work = (s.portfolio_projects ?? []).filter((p) => p.url);
-  return `You triage messages sent to ${studio}, a software studio in Nairobi, Kenya, and draft replies for the owner to approve.
+  return `You triage messages sent to ${studio}, a software studio in Nairobi, Kenya, and draft the reply. Replies to genuine enquiries are sent automatically, so write each one ready to send.
 
 ## The studio
 Website: ${site}
@@ -64,6 +69,16 @@ ${s.booking_link ? `\nBooking link for a short call: ${s.booking_link}` : ""}
 ## Urgency
 high: a ready buyer with a budget or deadline, an existing client with a problem, or anything time-sensitive.
 low: spam, job applications, tests, vague messages with no project.
+
+## When the owner must answer personally
+Your reply is sent automatically unless you set needs_human. Set it, with a short reason, when the message:
+- complains, is angry, or reports a problem with work we did
+- asks for a discount, a custom price outside the published packages, a contract, or payment terms
+- raises anything legal, a refund, or a dispute
+- asks something you can't answer from the facts above, or wants a firm deadline or commitment
+- is from an existing client about an ongoing project
+- is a test, unclear, or not really an enquiry
+Still draft the best reply you can; the owner will start from it.
 
 ## Drafting the reply
 - Write as the studio, warm and direct, in plain English a busy Kenyan business owner reads on a phone. Under 150 words.

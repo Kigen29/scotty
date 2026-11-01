@@ -47,6 +47,10 @@ const EMBEDS: Record<string, Record<string, { column: string; target: string }>>
     ab_tests_campaign_b_id_fkey: { column: "campaign_b_id", target: "email_campaigns" },
   },
   activity_logs: { profiles: { column: "user_id", target: "profiles" } },
+  agent_events: {
+    leads: { column: "lead_id", target: "leads" },
+    conversations: { column: "conversation_id", target: "conversations" },
+  },
   team_members: { profiles: { column: "user_id", target: "profiles" } },
 };
 

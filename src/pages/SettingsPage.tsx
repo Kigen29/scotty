@@ -39,6 +39,7 @@ const SettingsPage = () => {
     active_hours_start: "08:00",
     active_hours_end: "17:00",
     is_autonomous: true,
+    auto_reply_enabled: true,
     social_discovery_enabled: true,
     whatsapp_number: "",
     discovery_pipeline: "firecrawl",
@@ -72,6 +73,7 @@ const SettingsPage = () => {
         active_hours_start: data.active_hours_start || "08:00",
         active_hours_end: data.active_hours_end || "17:00",
         is_autonomous: data.is_autonomous ?? true,
+        auto_reply_enabled: data.auto_reply_enabled ?? true,
         social_discovery_enabled: data.social_discovery_enabled ?? true,
         whatsapp_number: data.whatsapp_number || "",
         discovery_pipeline: data.discovery_pipeline || "firecrawl",
@@ -372,6 +374,13 @@ const SettingsPage = () => {
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Automation</CardTitle></CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-xs">Reply to enquiries automatically</Label>
+                  <p className="text-[10px] text-muted-foreground">New enquiries get an instant reply. Complaints, pricing requests and anything unusual are held for you.</p>
+                </div>
+                <Switch checked={settings.auto_reply_enabled} onCheckedChange={(c) => setSettings((s) => ({ ...s, auto_reply_enabled: c }))} />
+              </div>
               <div className="flex items-center justify-between">
                 <div><Label className="text-xs">Autonomous Mode</Label><p className="text-[10px] text-muted-foreground">System sends emails without approval</p></div>
                 <Switch checked={settings.is_autonomous} onCheckedChange={(c) => setSettings((s) => ({ ...s, is_autonomous: c }))} />
