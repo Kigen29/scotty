@@ -1,5 +1,43 @@
 # scotty
 
+## 3.0.0
+
+### Major Changes
+
+- 110738a: Move the backend off Lovable's managed Supabase onto Neon, served by Scotty's own Vercel functions.
+  
+  Lovable's database never applied merged migrations and gave no way to deploy, so fixes in this repository
+  were not reaching production. The data was exported with Lovable's own export and loaded into the Neon
+  database Code 5's website uses, under a `scotty` schema: 410 leads, 337 campaigns, 456 activity entries,
+  settings, ICP profile and sequences, with every table's row count checked against the export.
+  
+  The screens are unchanged. `src/integrations/supabase/client.ts` keeps the slice of the supabase-js API
+  they use and sends it to `/api/db`, where `api/_lib/query.ts` turns it into parameterised SQL. That module
+  now does what row-level security did: only real tables and columns can be named, values are always bound,
+  and every read and write is pinned to the operator, who also overrides any `user_id` the client sends.
+  It carries the repository's first meaningful tests.
+  
+  Sign-in is a single operator with a password from the environment. Sign-ups are closed and realtime is
+  gone; screens refresh when they load or act.
+  
+  **Every action that calls an edge function now reports that it is being rebuilt**: discovery, drafting,
+  enrichment, verification, sending, the outreach agent and team management. They come back one at a time,
+  behind a single send gate. Nothing sends email in the meantime.
+
+### Patch Changes
+
+- dcce512: Update dependencies and clear the high-severity audit findings.
+  
+  Consolidates five Dependabot pull requests (#55–#59): `@tanstack/react-query` 5.103.1, `typescript-eslint`
+  8.70.1, `eslint-plugin-react-refresh` 0.5.7, `@changesets/cli` 3.0.3, `@types/node` 22.20.3 and
+  `autoprefixer` 10.6.1. `npm audit fix` patches `source-map-js`, `postcss-selector-parser` and `minimatch`.
+  
+  Removes `zod` and `@hookform/resolvers`, which nothing imports. They were Lovable template leftovers, and
+  `zod` 3 carried a high-severity advisory whose only fix is the 4.x major.
+  
+  `react-router` still carries two moderate advisories that need the 6 → 7 major. One concerns server-side
+  rendering, which this single-page app doesn't do. That upgrade gets its own branch.
+
 ## 2.0.3
 
 ### Patch Changes
