@@ -5,13 +5,15 @@
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /** `reply+<lead id>@<domain>`: replies to Scotty's emails come back here and land on the right lead. */
 export const replyAddress = (leadId: string, domain: string) => `reply+${leadId}@${domain}`;
 
 export function leadIdFromAddresses(addresses: string[], domain: string): string | null {
-  const re = new RegExp(`reply\\+(${UUID})@${domain.replace(/\./g, "\\.")}`, "i");
+  const re = new RegExp(`^reply\\+(${UUID})@${escapeRegExp(domain)}$`, "i");
   for (const a of addresses) {
-    const m = a.match(re);
+    const m = bareAddress(a).match(re);
     if (m) return m[1].toLowerCase();
   }
   return null;
