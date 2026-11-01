@@ -46,7 +46,7 @@ const Sheet = z.object({
     package_name: z.string().describe("The published package that fits best, by its exact name"),
     outcome: z.string().describe("One sentence on what having the site would do for them"),
   }),
-  message: z.string().describe("A short WhatsApp message to send with the report link, under 50 words, signed by the studio"),
+  message: z.string().describe("A short WhatsApp message to go with the report, under 50 words, signed by the studio. Don't include the link or a placeholder for it: the link is added after the message"),
 });
 type Sheet = z.infer<typeof Sheet>;
 
@@ -54,6 +54,7 @@ const SYSTEM = `You prepare cold-call notes and a free one-page report for Code 
 The owner calls small Kenyan businesses found on Google Maps that have no website, offers a free report on what they're
 missing online, and sends it only if they say yes. Write plainly and warmly, as a local business owner would speak:
 short sentences, no marketing jargon, no hype, no invented facts or statistics beyond what you're given.
+Use the caller's first name in the opener when it's given; never write placeholders like [Your Name].
 
 Published packages (KES):
 ${PACKAGES.map((p) => `- ${p.name}: ${p.price}. ${p.bestFor}`).join("\n")}
@@ -102,8 +103,9 @@ export async function prepareCall(leadId: string, operatorId: string, refresh = 
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("Claude isn't set up: ANTHROPIC_API_KEY is missing.");
 
   const comp = await competitors(lead, operatorId);
-  const [settings] = await q<{ portfolio_projects: { url?: string; industry?: string; problem_solved?: string }[] | null; booking_link: string | null }>(
-    "SELECT portfolio_projects, booking_link FROM scotty.settings WHERE user_id = $1::uuid",
+  const [settings] = await q<{ portfolio_projects: { url?: string; industry?: string; problem_solved?: string }[] | null; booking_link: string | null; caller: string | null }>(
+    `SELECT s.portfolio_projects, s.booking_link, coalesce(p.display_name, s.company_name) AS caller
+       FROM scotty.settings s LEFT JOIN scotty.profiles p ON p.id = s.user_id WHERE s.user_id = $1::uuid`,
     [operatorId],
   );
   const details = {
@@ -115,6 +117,8 @@ export async function prepareCall(leadId: string, operatorId: string, refresh = 
     website: lead.analysis?.website === "social" ? "social media page only" : "none",
     competitors: comp ? `${comp.with_site} of ${comp.found} businesses found for "${comp.search}" already have a website` : null,
     our_past_work: (settings?.portfolio_projects ?? []).map((p) => `${p.url} (${p.industry}): ${p.problem_solved}`),
+    // Who is calling, so the opener uses a real name rather than a placeholder.
+    caller_first_name: settings?.caller?.trim().split(/\s+/)[0] ?? null,
   };
 
   client ??= new Anthropic();
@@ -128,7 +132,9 @@ export async function prepareCall(leadId: string, operatorId: string, refresh = 
     messages: [{ role: "user", content: `Prepare the call notes and report for this business.\n\n<business>\n${JSON.stringify(details)}\n</business>` }],
   });
   if (response.stop_reason === "refusal" || !response.parsed_output) throw new Error("Claude couldn't prepare this call.");
-  const sheet = { ...response.parsed_output, competitors: comp };
+  // Belt and braces: the link is appended when sending, so drop any placeholder the model left in.
+  const out = response.parsed_output;
+  const sheet = { ...out, message: out.message.replace(/\s*:?\s*\[(link|report link|url)\]\.?/gi, ".").replace(/\.\.+/g, ".").trim(), competitors: comp };
   const token = lead.report_token ?? randomBytes(12).toString("base64url");
 
   await q("UPDATE scotty.leads SET report = $3::jsonb, report_token = $4 WHERE id = $1::uuid AND user_id = $2::uuid", [leadId, operatorId, JSON.stringify(sheet), token]);
