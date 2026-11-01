@@ -103,8 +103,8 @@ const Reports = () => {
     <div className="p-6 space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Reports & Analytics</h1>
-          <p className="text-sm text-muted-foreground">Track your outreach performance</p>
+          <h1 className="text-lg font-semibold tracking-tight">Reports</h1>
+          <p className="text-[13px] text-muted-foreground">Track your outreach performance</p>
         </div>
         <Button onClick={exportCSV} variant="outline" size="sm">
           <Download className="h-4 w-4 mr-1" /> Export CSV

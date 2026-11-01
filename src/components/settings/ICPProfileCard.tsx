@@ -183,7 +183,7 @@ export const ICPProfileCard = ({ userId }: { userId: string }) => {
           </div>
           <div className="flex flex-wrap gap-1.5 mt-1">
             {profile.pain_points.map((v, i) => (
-              <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent/20 text-accent-foreground text-xs">
+              <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-warning/15 text-warning text-xs">
                 {v} <button onClick={() => removeFromList("pain_points", i)}><X className="h-2.5 w-2.5" /></button>
               </span>
             ))}

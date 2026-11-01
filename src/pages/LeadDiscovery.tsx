@@ -321,8 +321,8 @@ const LeadDiscovery = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Lead Discovery</h1>
-          <p className="text-sm text-muted-foreground">Find Kenyan businesses that need your services</p>
+          <h1 className="text-lg font-semibold tracking-tight">Lead Discovery</h1>
+          <p className="text-[13px] text-muted-foreground">Find Kenyan businesses that need your services</p>
         </div>
       </div>
 
@@ -641,7 +641,7 @@ const LeadDiscovery = () => {
                     <div className="flex items-center gap-2 text-primary font-medium text-sm">
                       <Brain className="h-4 w-4" /> AI Analysis
                     </div>
-                    <p className="text-sm text-muted-foreground">{(detailLead.analysis as any).summary}</p>
+                    <p className="text-[13px] text-muted-foreground">{(detailLead.analysis as any).summary}</p>
                     {(detailLead.analysis as any).pain_points?.length > 0 && (
                       <div>
                         <p className="text-xs font-semibold mb-1">Pain Points</p>
@@ -665,9 +665,9 @@ const LeadDiscovery = () => {
                 {(detailLead.analysis as any)?.enrichment && (() => {
                   const e = (detailLead.analysis as any).enrichment;
                   return (
-                    <div className="space-y-3 p-3 rounded-lg bg-accent/5 border border-accent/20">
+                    <div className="space-y-3 p-3 rounded-lg bg-warning/5 border border-warning/20">
                       <div className="flex items-center gap-2 font-medium text-sm">
-                        <Sparkles className="h-4 w-4 text-accent" /> Enrichment Data
+                        <Sparkles className="h-4 w-4 text-warning" /> Enrichment Data
                         <Badge variant="outline" className="text-[10px] ml-auto">{e.confidence} confidence</Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs">

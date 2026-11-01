@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { OutreachPaused } from "@/components/scotty/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -140,10 +141,11 @@ const Campaigns = () => {
 
   return (
     <div className="p-4 md:p-6 space-y-4">
+      <OutreachPaused />
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold">Campaigns</h1>
-          <p className="text-sm text-muted-foreground">AI-crafted outreach across all channels</p>
+          <h1 className="text-lg font-semibold tracking-tight">Campaigns</h1>
+          <p className="text-[13px] text-muted-foreground">Outreach emails and drafts</p>
         </div>
         {draftCount > 0 && (
           <Button size="sm" className="h-8 text-xs gap-1.5" onClick={sendAllDrafts} disabled={bulkSending}>

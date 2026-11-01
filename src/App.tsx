@@ -6,10 +6,13 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import AppLayout from "@/components/AppLayout";
 import Auth from "@/pages/Auth";
-import Dashboard from "@/pages/Dashboard";
+import Home from "@/pages/Home";
+import Inbox from "@/pages/Inbox";
+import Leads from "@/pages/Leads";
+import LeadDetail from "@/pages/LeadDetail";
+import Agent from "@/pages/Agent";
 import LeadDiscovery from "@/pages/LeadDiscovery";
 import Campaigns from "@/pages/Campaigns";
-import Conversations from "@/pages/Conversations";
 import Reports from "@/pages/Reports";
 import Deliverability from "@/pages/Deliverability";
 import SettingsPage from "@/pages/SettingsPage";
@@ -17,7 +20,7 @@ import Sequences from "@/pages/Sequences";
 import Pipeline from "@/pages/Pipeline";
 import NotFound from "@/pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 10_000, retry: 1 } } });
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -41,11 +44,14 @@ const App = () => (
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Home />} />
+            <Route path="/inbox" element={<Inbox />} />
+            <Route path="/leads" element={<Leads />} />
+            <Route path="/leads/:id" element={<LeadDetail />} />
+            <Route path="/agent" element={<Agent />} />
             <Route path="/discovery" element={<LeadDiscovery />} />
             <Route path="/campaigns" element={<Campaigns />} />
-            <Route path="/inbox" element={<Conversations />} />
-            <Route path="/conversations" element={<Conversations />} />
+            <Route path="/conversations" element={<Navigate to="/inbox" replace />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/deliverability" element={<Deliverability />} />
             <Route path="/sequences" element={<Sequences />} />
